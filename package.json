@@ -1,0 +1,35 @@
+{
+  "name": "apirest_bicycle",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@mapbox/polyline": "^1.2.1",
+    "@slack/webhook": "^7.0.2",
+    "@turf/turf": "^7.2.0",
+    "apirest_bicycle": "file:",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dicer": "^0.3.1",
+    "dotenv": "^16.0.0",
+    "express": "^4.17.3",
+    "express-validator": "^6.14.0",
+    "firebase-admin": "^13.5.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^6.2.8",
+    "morgan-body": "^2.6.6",
+    "multer": "^2.0.1",
+    "mysql2": "^3.10.0",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^7.0.5",
+    "sequelize": "^6.25.1"
+  }
+}
