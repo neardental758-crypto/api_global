@@ -44,6 +44,9 @@ const Candado = sequelize.define(
         can_ultimo_comando: {
             type: DataTypes.STRING,
         },
+        can_bicicleta: {
+            type: DataTypes.INTEGER,
+        },
         can_created_at: {
             type: DataTypes.DATE,
         },
