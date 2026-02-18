@@ -9,8 +9,20 @@ const Usuario = sequelize.define(
             type: DataTypes.STRING,
             primaryKey: true,
         },
+        usu_tipo_documento: {
+            type: DataTypes.STRING(50),
+        },
         usu_nombre: {
             type: DataTypes.STRING,
+        },
+        usu_email: {
+            type: DataTypes.STRING,
+        },
+        usu_password: {
+            type: DataTypes.STRING,
+        },
+        usu_telefono: {
+            type: DataTypes.STRING(50),
         },
         usu_empresa: {
             type: DataTypes.STRING,
@@ -18,16 +30,7 @@ const Usuario = sequelize.define(
         usu_ciudad: {
             type: DataTypes.STRING,
         },
-        usu_habilitado: {
-            type: DataTypes.INTEGER,
-        },
-        usu_calificacion: {
-            type: DataTypes.FLOAT,
-        },
-        usu_viajes: {
-            type: DataTypes.INTEGER,
-        },
-        usu_edad: {
+        usu_fecha_nacimiento: {
             type: DataTypes.STRING,
         },
         usu_genero: {
@@ -42,43 +45,22 @@ const Usuario = sequelize.define(
         usu_recorrido: {
             type: DataTypes.STRING,
         },
-        usu_roles_carpooling: {
-            type: DataTypes.STRING,
-        },
-        coorCasa: {
+        usu_coor_casa: {
             type: DataTypes.JSON,
         },
-        coorTrabajo: {
+        usu_coor_trabajo: {
             type: DataTypes.JSON,
         },
         usu_img: {
             type: DataTypes.STRING,
         },
-        usu_creacion: {
-            type: DataTypes.STRING,
+        usu_habilitado: {
+            type: DataTypes.INTEGER,
         },
         usu_prueba: {
             type: DataTypes.BOOLEAN,
         },
-        usu_modulo_carpooling: {
-            type: DataTypes.BOOLEAN,
-        },
         usu_rol_dash: {
-            type: DataTypes.STRING,
-        },
-        usu_email: {
-            type: DataTypes.STRING,
-        },
-        usu_password: {
-            type: DataTypes.STRING,
-        },
-        usu_tipo_documento: {
-            type: DataTypes.STRING(50),
-        },
-        usu_telefono: {
-            type: DataTypes.STRING(50),
-        },
-        usu_avatar: {
             type: DataTypes.STRING,
         },
         usu_created_at: {
