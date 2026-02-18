@@ -895,26 +895,6 @@ CREATE TABLE `bc_usuarios` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Table structure for table `bc_usuarios_credenciales`
---
-
-DROP TABLE IF EXISTS `bc_usuarios_credenciales`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `bc_usuarios_credenciales` (
-  `uc_id` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `uc_usuario_id` varchar(45) CHARACTER SET latin1 COLLATE latin1_swedish_ci NOT NULL,
-  `uc_password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,
-  `uc_created_at` datetime DEFAULT NULL,
-  `uc_updated_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`uc_id`),
-  UNIQUE KEY `unique_usuario` (`uc_usuario_id`),
-  KEY `idx_usuario` (`uc_usuario_id`),
-  CONSTRAINT `bc_usuarios_credenciales_ibfk_1` FOREIGN KEY (`uc_usuario_id`) REFERENCES `bc_usuarios` (`usu_documento`) ON DELETE CASCADE ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
 -- Table structure for table `bc_usuarios_empresas`
 --
 
