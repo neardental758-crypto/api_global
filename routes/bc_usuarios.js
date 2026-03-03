@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/session');
 const { validatorCreateUser, validatorGetUser, validatorLogin, validatorUpdateUser, validatorPatch, validatorOrganizationId } = require('../validators/usersValidators');
 const { getItems, getItem, changeNames, createItem, deleteItem,
-    login, correo__password_ride, correo__password_meb, generateTokenForOrganization, updateItem, patchItem, patchOrganization, getItems_cortezza, getItem_cortezza, createUserComplete , getOperarios, checkUserExists,getUsersByOrganization} = require('../controllers/usuario');
+    login, loginApp, correo__password_ride, correo__password_meb, generateTokenForOrganization, updateItem, patchItem, patchOrganization, getItems_cortezza, getItem_cortezza, createUserComplete, getOperarios, checkUserExists, getUsersByOrganization } = require('../controllers/usuario');
 /**
  * las rutas de las diferentes peticiones para esta colección
  */
@@ -21,12 +21,16 @@ router.get("/", authMiddleware(["all"]), getItems);
 //router.get("/:id", validatorGetUser, authMiddleware(["all"]), checkRol(['admin']),  getItem); //linea original
 router.get("/id/:usu_documento", authMiddleware(["all"]), validatorGetUser, getItem);
 
-//POST registro de un usuario
-router.post("/registrar", authMiddleware(["all"]), validatorCreateUser, createItem);
+//POST registro de un usuario (público - no requiere token)
+router.post("/registrar", validatorCreateUser, createItem);
+
+// Login público para la app móvil (sin authMiddleware)
+router.post("/login_app", loginApp);
 
 router.post("/updateusuario", authMiddleware(["all"]), validatorUpdateUser, updateItem);
 
 router.post("/login", authMiddleware(["all"]), validatorLogin, login);
+router.post("/login_app", loginApp);
 
 router.post("/correo_password_ride", correo__password_ride);
 router.post("/correo_password_meb", correo__password_meb);
@@ -37,9 +41,9 @@ router.patch("/:usu_documento", authMiddleware(["all"]), validatorPatch, patchIt
 
 router.patch("/empresa/:usu_documento", authMiddleware(["all"]), validatorPatch, patchOrganization);
 
-router.post('/create_user_complete',authMiddleware(["all"]), createUserComplete);
+router.post('/create_user_complete', authMiddleware(["all"]), createUserComplete);
 
-router.get('/operarios',authMiddleware(["all"]),  getOperarios);
+router.get('/operarios', authMiddleware(["all"]), getOperarios);
 
 router.get('/check_exists/:idNumber', authMiddleware(["all"]), checkUserExists);
 

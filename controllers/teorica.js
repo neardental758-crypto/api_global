@@ -9,20 +9,20 @@ const getItems = async (req, res) => {
     const organization = filtro.organizationId;
     try {
         const data = await teoricaModels.findAll({
-            include : [{
-                model : Usuario,
-                attributes : ['usu_documento', 'usu_nombre'],
-                include:[{
+            include: [{
+                model: Usuario,
+                attributes: ['usu_documento', 'usu_nombre'],
+                include: [{
                     model: Empresa,
                     attributes: ['emp_id'],
-                    where : {
-                        emp_id : organization
+                    where: {
+                        emp_id: organization
                     }
-                  }],
-                  required: true
+                }],
+                required: true
             }]
         });
-        res.send({data});
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_TEORICA");
     }
@@ -36,17 +36,20 @@ const getItem = async (req, res) => {
         const data = await teoricaModels.findAll({
             include: [{
                 model: Usuario,
-                attributes: ['usu_documento', 'usu_nombre', 'usu_creacion'],
+                attributes: ['usu_documento', 'usu_nombre', 'usu_created_at'],
             }],
-            where : {
-                teorica_usuario : _id,
-                teorica_resultado : 'APROBO'
+            where: {
+                teorica_usuario: _id,
+                teorica_resultado: 'APROBO'
             }
         });
-        // if(user.usu_creacion < "2024-10-25T00:00:00.000Z"){
-        if(user.usu_creacion < "2024-12-24T00:00:00.000Z"){
-            res.send({ "data" : ["Es", "usuario", "antiguo"] });
-        }else{
+        // Comparar convirtiendo a objetos Date
+        const creationDate = new Date(user.usu_created_at);
+        const cutoffDate = new Date("2024-07-01T00:00:00.000Z");
+
+        if (creationDate < cutoffDate) {
+            res.send({ "data": ["Es", "usuario", "antiguo"] });
+        } else {
             res.send({ data });
         }
     } catch (e) {
@@ -83,7 +86,7 @@ const updateItem = async (req, res) => {
     // }
 };
 
-const deleteItem = (req, res) => {};
+const deleteItem = (req, res) => { };
 
 module.exports = {
     getItems, getItem, createItem, updateItem, deleteItem

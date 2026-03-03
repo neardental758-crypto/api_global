@@ -5,7 +5,7 @@ const authMiddleware = require('../middleware/session');
 
 router.get("/", authMiddleware(["all"]), getItems);
 
-router.get("/id/:_id", authMiddleware(["all"]), getItem);
+router.get("/id/:_id", getItem);
 
 router.post("/registrar", authMiddleware(["all"]), createItem);
 

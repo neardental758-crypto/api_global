@@ -70,7 +70,7 @@ const TarjetaNfc = require('./mysql/tarjetasNfc');
 
 const MOTORDB = process.env.MOTORDB;
 
-if (MOTORDB === 'mysql'){
+if (MOTORDB === 'mysql') {
     const models = {
         empresaModels: require('./mysql/empresa'),
         usuarioModels: require('./mysql/usuario'),
@@ -110,8 +110,8 @@ if (MOTORDB === 'mysql'){
         compartidoViajeActivoModels: require('./mysql/compartidoViajeActivo'),
         compartidoComentariosModels: require('./mysql/compartidoComentarios'),
         formularioModels: require('./mysql/formtuimpacto'),
-        formularioOrganizationModels : require('./mysql/formOrganization'),
-        tokenMsnModels : require('./mysql/tokenMsn'),
+        formularioOrganizationModels: require('./mysql/formOrganization'),
+        tokenMsnModels: require('./mysql/tokenMsn'),
         compartidoPagosModels: require('./mysql/compartidosPagos'),
         agendamientoUsuariosModels: require('./mysql/agendamientoUsuario'),
         practicaActivaModels: require('./mysql/practicaActiva'),
@@ -131,7 +131,7 @@ if (MOTORDB === 'mysql'){
         horariosParqeuaderoModels: require('./mysql/parqueo_horarios'),
         contenidoModel: require('./mysql/contenido'),
         preguntasBrainModel: require('./mysql/preguntasBrain'),
-        respuestaBrainModel : require('./mysql/respuestaBrain'),
+        respuestaBrainModel: require('./mysql/respuestaBrain'),
         tematicaModel: require('./mysql/tematica'),
         categoriaComponenteModels: require('./mysql/categoria_componente'),
         componenteModels: require('./mysql/componente'),
@@ -154,58 +154,58 @@ if (MOTORDB === 'mysql'){
         usuariosRolesModels: require('./mysql/usuariosRoles'),
         permisosModels: require('./mysql/permisos'),
         tarjetasNfcModels: require('./mysql/tarjetasNfc'),
-            };
+    };
 
-    Prestamos.belongsTo(Usuario, {foreignKey : "pre_usuario"});
-    Usuario.hasMany(Prestamos,{foreignKey : "pre_usuario"});
+    Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
+    Usuario.hasMany(Prestamos, { foreignKey: "pre_usuario" });
 
-    Prestamos.belongsTo(Bicicleta, {foreignKey : "pre_bicicleta"});
-    Bicicleta.hasOne(Prestamos,{foreignKey : "pre_bicicleta"});
+    Prestamos.belongsTo(Bicicleta, { foreignKey: "pre_bicicleta" });
+    Bicicleta.hasOne(Prestamos, { foreignKey: "pre_bicicleta" });
 
-    Prestamos.belongsTo(Bicicletero, {foreignKey : "pre_retiro_bicicletero"});
-    Bicicletero.hasOne(Prestamos,{foreignKey : "pre_retiro_bicicletero"});
+    Prestamos.belongsTo(Bicicletero, { foreignKey: "pre_retiro_bicicletero" });
+    Bicicletero.hasOne(Prestamos, { foreignKey: "pre_retiro_bicicletero" });
 
-    Estacion.belongsTo(Empresa,{ foreignKey : "est_empresa" });
-    Empresa.hasMany(Estacion,{ foreignKey : "est_empresa" });
+    Estacion.belongsTo(Empresa, { foreignKey: "est_empresa", targetKey: "emp_nombre" });
+    Empresa.hasMany(Estacion, { foreignKey: "est_empresa", sourceKey: "emp_nombre" });
 
-    Reserva.belongsTo(Usuario, {foreignKey : "res_usuario"});
-    Usuario.hasMany(Reserva,{foreignKey : "res_usuario"});
+    Reserva.belongsTo(Usuario, { foreignKey: "res_usuario" });
+    Usuario.hasMany(Reserva, { foreignKey: "res_usuario" });
 
-    Reserva.belongsTo(Bicicleta, {foreignKey : "res_bicicleta"});
-    Bicicleta.hasOne(Reserva,{foreignKey : "res_bicicleta"});
+    Reserva.belongsTo(Bicicleta, { foreignKey: "res_bicicleta" });
+    Bicicleta.hasOne(Reserva, { foreignKey: "res_bicicleta" });
 
-    Usuario.belongsTo(Empresa,{ foreignKey : "usu_empresa" });
-    Empresa.hasOne(Usuario,{ foreignKey : "usu_empresa" });
+    Usuario.belongsTo(Empresa, { foreignKey: "usu_empresa" });
+    Empresa.hasOne(Usuario, { foreignKey: "usu_empresa" });
 
-    Usuario.belongsTo(Extendido,{ foreignKey : "usu_documento", as: 'extendido' });
-    Extendido.hasOne(Usuario,{ foreignKey : "usu_documento", as: 'extendido' });
+    Usuario.belongsTo(Extendido, { foreignKey: "usu_documento", as: 'extendido' });
+    Extendido.hasOne(Usuario, { foreignKey: "usu_documento", as: 'extendido' });
 
-    Claves.belongsTo(Estacion,{ foreignKey : "his_estacion" });
-    Estacion.hasMany(Claves,{ foreignKey : "his_estacion" });
+    Claves.belongsTo(Estacion, { foreignKey: "his_estacion" });
+    Estacion.hasMany(Claves, { foreignKey: "his_estacion" });
 
-    Claves.belongsTo(Bicicleta,{ foreignKey : "his_bicicleta" });
-    Bicicleta.hasOne(Claves,{ foreignKey : "his_bicicleta" });
-    
-    Bicicleta.belongsTo(Estacion,{ foreignKey : "bic_estacion" });
-    Estacion.hasMany(Bicicleta,{ foreignKey : "bic_estacion" });
+    Claves.belongsTo(Bicicleta, { foreignKey: "his_bicicleta" });
+    Bicicleta.hasOne(Claves, { foreignKey: "his_bicicleta" });
 
-    Bicicletero.belongsTo(Estacion,{ foreignKey : "bro_estacion" });
-    Estacion.hasMany(Bicicletero,{ foreignKey : "bro_estacion" });
+    Bicicleta.belongsTo(Estacion, { foreignKey: "bic_estacion" });
+    Estacion.hasMany(Bicicleta, { foreignKey: "bic_estacion" });
 
-    Reserva.belongsTo(Estacion,{ foreignKey : "res_estacion" });
-    Estacion.hasMany(Reserva,{ foreignKey : "res_estacion" });
+    Bicicletero.belongsTo(Estacion, { foreignKey: "bro_estacion" });
+    Estacion.hasMany(Bicicletero, { foreignKey: "bro_estacion" });
 
-    Comentarios.belongsTo(Prestamos,{ foreignKey : "com_prestamo" });
-    Prestamos.hasMany(Comentarios,{ foreignKey : "com_prestamo" });
+    Reserva.belongsTo(Estacion, { foreignKey: "res_estacion" });
+    Estacion.hasMany(Reserva, { foreignKey: "res_estacion" });
 
-    Prestamos.belongsTo(Estacion,{ foreignKey : "pre_retiro_estacion" });
-    Estacion.hasMany(Prestamos,{ foreignKey : "pre_retiro_estacion" });
+    Comentarios.belongsTo(Prestamos, { foreignKey: "com_prestamo" });
+    Prestamos.hasMany(Comentarios, { foreignKey: "com_prestamo" });
 
-    Comentarios.belongsTo(Usuario,{ foreignKey : "com_usuario" });
-    Usuario.hasMany(Comentarios,{ foreignKey : "com_usuario" });
+    Prestamos.belongsTo(Estacion, { foreignKey: "pre_retiro_estacion" });
+    Estacion.hasMany(Prestamos, { foreignKey: "pre_retiro_estacion" });
 
-    Puntos.belongsTo(Usuario,{ foreignKey : "pun_usuario" });
-    Usuario.hasMany(Puntos,{ foreignKey : "pun_usuario" });
+    Comentarios.belongsTo(Usuario, { foreignKey: "com_usuario" });
+    Usuario.hasMany(Comentarios, { foreignKey: "com_usuario" });
+
+    Puntos.belongsTo(Usuario, { foreignKey: "pun_usuario" });
+    Usuario.hasMany(Puntos, { foreignKey: "pun_usuario" });
 
     Estacion.belongsTo(Usuario, { foreignKey: 'est_direccion', targetKey: 'usu_dir_trabajo' });
     Usuario.hasOne(Estacion, { foreignKey: 'est_direccion', sourceKey: 'usu_dir_trabajo' });
@@ -233,7 +233,7 @@ if (MOTORDB === 'mysql'){
         sourceKey: 'id_logro',
         as: 'progresos'
     });
-    
+
     // Un progreso pertenece a un logro
     ProgresoLogros.belongsTo(Logros, {
         foreignKey: 'logro_id',
@@ -246,7 +246,7 @@ if (MOTORDB === 'mysql'){
 
     Desafios.belongsTo(ProgresoDesafios, { foreignKey: 'id_desafio', targetKey: 'desafio_id' });
     ProgresoDesafios.hasOne(Desafios, { foreignKey: 'id_desafio', sourceKey: 'desafio_id' });
-      
+
     Bicicleta.belongsTo(Bicicletero, { foreignKey: 'bic_id', targetKey: 'bro_bicicleta' });
     Bicicletero.hasOne(Bicicleta, { foreignKey: 'bic_id', sourceKey: 'bro_bicicleta' });
 
@@ -259,35 +259,35 @@ if (MOTORDB === 'mysql'){
     ComentariosParticular.belongsTo(ViajesParticular, { foreignKey: 'com_id_viaje', targetKey: 'via_id', as: 'comentarios' });
     ViajesParticular.hasMany(ComentariosParticular, { foreignKey: 'com_id_viaje', sourceKey: 'via_id', as: 'comentarios' });
     //Carpooling
-    CompartidoComentarios.belongsTo(Usuario,{ foreignKey : "idEnvio", targetKey: 'usu_documento', as: 'usuarioEnviado'  });
-    Usuario.hasMany(CompartidoComentarios,{ foreignKey : "idEnvio", targetKey: 'usu_documento', as: 'usuarioEnviado'  });
+    CompartidoComentarios.belongsTo(Usuario, { foreignKey: "idEnvio", targetKey: 'usu_documento', as: 'usuarioEnviado' });
+    Usuario.hasMany(CompartidoComentarios, { foreignKey: "idEnvio", targetKey: 'usu_documento', as: 'usuarioEnviado' });
 
-    CompartidoComentarios.belongsTo(Usuario,{ foreignKey : "idRecibido", targetKey: 'usu_documento', as: 'usuarioRecibido'  });
-    Usuario.hasMany(CompartidoComentarios,{ foreignKey : "idRecibido", targetKey: 'usu_documento', as: 'usuarioRecibido'  });
+    CompartidoComentarios.belongsTo(Usuario, { foreignKey: "idRecibido", targetKey: 'usu_documento', as: 'usuarioRecibido' });
+    Usuario.hasMany(CompartidoComentarios, { foreignKey: "idRecibido", targetKey: 'usu_documento', as: 'usuarioRecibido' });
 
-    CompartidoComentarios.belongsTo(CompartidoViajeActivo,{ foreignKey : "idViaje", targetKey: '_id', as: 'comentariosRelacionados'  });
-    CompartidoViajeActivo.hasMany(CompartidoComentarios,{ foreignKey : "idViaje", targetKey: '_id', as: 'compartidoComentarios'  });
+    CompartidoComentarios.belongsTo(CompartidoViajeActivo, { foreignKey: "idViaje", targetKey: '_id', as: 'comentariosRelacionados' });
+    CompartidoViajeActivo.hasMany(CompartidoComentarios, { foreignKey: "idViaje", targetKey: '_id', as: 'compartidoComentarios' });
 
-    CompartidoConductor.belongsTo(Usuario,{ foreignKey : "_id", targetKey: 'usu_documento', as: 'conductor'  });
-    Usuario.hasOne(CompartidoConductor,{ foreignKey : "_id", targetKey: 'usu_documento', as: 'conductor'  });
+    CompartidoConductor.belongsTo(Usuario, { foreignKey: "_id", targetKey: 'usu_documento', as: 'conductor' });
+    Usuario.hasOne(CompartidoConductor, { foreignKey: "_id", targetKey: 'usu_documento', as: 'conductor' });
 
-    CompartidoViajeActivo.belongsTo(CompartidoConductor,{ foreignKey : "conductor", targetKey: '_id', as: 'viajeActivoConductor'  });
-    CompartidoConductor.hasMany(CompartidoViajeActivo,{ foreignKey : "conductor", targetKey: '_id', as: 'viajeActivoConductor'  });
+    CompartidoViajeActivo.belongsTo(CompartidoConductor, { foreignKey: "conductor", targetKey: '_id', as: 'viajeActivoConductor' });
+    CompartidoConductor.hasMany(CompartidoViajeActivo, { foreignKey: "conductor", targetKey: '_id', as: 'viajeActivoConductor' });
 
-    CompartidoPasajero.belongsTo(Usuario,{ foreignKey : "_id", targetKey: 'usu_documento', as: 'pasajero'  });
-    Usuario.hasOne(CompartidoPasajero,{ foreignKey : "_id", targetKey: 'usu_documento', as: 'pasajero'  });
+    CompartidoPasajero.belongsTo(Usuario, { foreignKey: "_id", targetKey: 'usu_documento', as: 'pasajero' });
+    Usuario.hasOne(CompartidoPasajero, { foreignKey: "_id", targetKey: 'usu_documento', as: 'pasajero' });
 
-    CompartidoSolicitud.belongsTo(CompartidoPasajero,{ foreignKey : "idSolicitante", targetKey: '_id', as: 'viajeActivoPasajero'  });
-    CompartidoPasajero.hasMany(CompartidoSolicitud,{ foreignKey : "idSolicitante", targetKey: '_id', as: 'viajeActivoPasajero'  });
+    CompartidoSolicitud.belongsTo(CompartidoPasajero, { foreignKey: "idSolicitante", targetKey: '_id', as: 'viajeActivoPasajero' });
+    CompartidoPasajero.hasMany(CompartidoSolicitud, { foreignKey: "idSolicitante", targetKey: '_id', as: 'viajeActivoPasajero' });
 
-    CompartidoSolicitud.belongsTo(CompartidoViajeActivo,{ foreignKey : "idViajeSolicitado", targetKey: '_id', as: 'viajeSolicitado' });
-    CompartidoViajeActivo.hasMany(CompartidoSolicitud,{ foreignKey : "idViajeSolicitado", targetKey: '_id', as: 'viajeSolicitado' });
+    CompartidoSolicitud.belongsTo(CompartidoViajeActivo, { foreignKey: "idViajeSolicitado", targetKey: '_id', as: 'viajeSolicitado' });
+    CompartidoViajeActivo.hasMany(CompartidoSolicitud, { foreignKey: "idViajeSolicitado", targetKey: '_id', as: 'viajeSolicitado' });
 
     CompartidoSolicitud.belongsTo(Usuario, { foreignKey: 'idSolicitante', targetKey: 'usu_documento' });
     Usuario.hasMany(CompartidoSolicitud, { foreignKey: 'idSolicitante', targetKey: 'usu_documento' });
 
-    CompartidoViajeActivo.belongsTo(Usuario,{ foreignKey : "conductor", targetKey: 'usu_documento' });
-    Usuario.hasMany(CompartidoViajeActivo,{ foreignKey : "conductor", targetKey: 'usu_documento' });
+    CompartidoViajeActivo.belongsTo(Usuario, { foreignKey: "conductor", targetKey: 'usu_documento' });
+    Usuario.hasMany(CompartidoViajeActivo, { foreignKey: "conductor", targetKey: 'usu_documento' });
 
     CompartidoPagos.belongsTo(CompartidoSolicitud, { foreignKey: 'idSolicitud', targetKey: '_id' });
     CompartidoSolicitud.hasMany(CompartidoPagos, { foreignKey: 'idSolicitud', sourceKey: '_id' });
@@ -321,13 +321,13 @@ if (MOTORDB === 'mysql'){
     Reserva_parqueo.hasOne(Renta_parqueo, { foreignKey: 'lugar_parqueo', sourceKey: 'id' });
 
     //Nuevos
-    indicadoresModels.belongsTo(Prestamos, { 
-        foreignKey: 'ind_viaje', 
+    indicadoresModels.belongsTo(Prestamos, {
+        foreignKey: 'ind_viaje',
         targetKey: 'pre_id',
         as: 'prestamo'
     });
-    Prestamos.hasMany(indicadoresModels, { 
-        foreignKey: 'ind_viaje', 
+    Prestamos.hasMany(indicadoresModels, {
+        foreignKey: 'ind_viaje',
         sourceKey: 'pre_id',
         as: 'indicadores'
     });
@@ -350,7 +350,7 @@ if (MOTORDB === 'mysql'){
     });
     //
     Bicicleta.belongsTo(Estacion, { foreignKey: 'bic_estacion', targetKey: 'est_estacion' });
-        Estacion.hasMany(Bicicleta, { foreignKey: 'bic_estacion', sourceKey: 'est_estacion' });
+    Estacion.hasMany(Bicicleta, { foreignKey: 'bic_estacion', sourceKey: 'est_estacion' });
 
     Contenido.belongsTo(Tematica, { foreignKey: 'id_tematica', targetKey: '_id' });
     Tematica.hasMany(Contenido, { foreignKey: 'id_tematica', sourceKey: '_id' });
@@ -376,30 +376,30 @@ if (MOTORDB === 'mysql'){
     Componente.hasMany(HistorialMantenimiento, { foreignKey: 'componente_id' });
     HistorialMantenimiento.belongsTo(Componente, { foreignKey: 'componente_id' });
 
-    
+
     Bicicleta.hasMany(Mantenimiento, { foreignKey: 'bicicleta_id' });
     Mantenimiento.belongsTo(Bicicleta, { foreignKey: 'bicicleta_id' });
 
     // En tu archivo de modelos/asociaciones (index.js)
-    Mantenimiento.belongsTo(Usuario, { 
-        foreignKey: 'operario_id', 
+    Mantenimiento.belongsTo(Usuario, {
+        foreignKey: 'operario_id',
         targetKey: 'usu_documento',
         as: 'operario'
     });
-    Usuario.hasMany(Mantenimiento, { 
-        foreignKey: 'operario_id', 
+    Usuario.hasMany(Mantenimiento, {
+        foreignKey: 'operario_id',
         sourceKey: 'usu_documento',
         as: 'mantenimientos'
     });
 
-    HistorialMantenimiento.belongsTo(Usuario,{
-        foreignKey : "operario_id",
+    HistorialMantenimiento.belongsTo(Usuario, {
+        foreignKey: "operario_id",
         targetKey: 'usu_documento',
         as: 'operario'
     })
 
-    Usuario.hasMany(HistorialMantenimiento,{
-        foreignKey : "operario_id",
+    Usuario.hasMany(HistorialMantenimiento, {
+        foreignKey: "operario_id",
         sourceKey: 'usu_documento',
         as: 'historiales_mantenimiento'
     })
@@ -407,8 +407,8 @@ if (MOTORDB === 'mysql'){
     LugarParqueo.belongsTo(Parqueaderos, { foreignKey: 'parqueadero', as: 'parqueaderoInfo' });
 
     Renta_parqueo.belongsTo(Usuario, {
-    foreignKey: 'usuario',
-    targetKey: 'usu_documento'
+        foreignKey: 'usuario',
+        targetKey: 'usu_documento'
     });
 
     Usuario.hasMany(Renta_parqueo, {
@@ -427,212 +427,211 @@ if (MOTORDB === 'mysql'){
     });
 
     VehiculosParticular.belongsTo(Usuario, {
-    foreignKey: 'vus_usuario',
-    targetKey: 'usu_documento',
-    as: 'usuario'
-});
+        foreignKey: 'vus_usuario',
+        targetKey: 'usu_documento',
+        as: 'usuario'
+    });
 
-Usuario.hasMany(VehiculosParticular, {
-    foreignKey: 'vus_usuario',
-    sourceKey: 'usu_documento',
-    as: 'vehiculos'
-});
+    Usuario.hasMany(VehiculosParticular, {
+        foreignKey: 'vus_usuario',
+        sourceKey: 'usu_documento',
+        as: 'vehiculos'
+    });
 
-Parqueaderos.hasOne(Horarios_parqueadero, {
-    foreignKey: 'parqueadero',
-    sourceKey: 'id',
-    as: 'horarios'
-});
+    Parqueaderos.hasOne(Horarios_parqueadero, {
+        foreignKey: 'parqueadero',
+        sourceKey: 'id',
+        as: 'horarios'
+    });
 
-Horarios_parqueadero.belongsTo(Parqueaderos, {
-    foreignKey: 'parqueadero',
-    targetKey: 'id',
-    as: 'parqueadero_info'
-});
+    Horarios_parqueadero.belongsTo(Parqueaderos, {
+        foreignKey: 'parqueadero',
+        targetKey: 'id',
+        as: 'parqueadero_info'
+    });
 
-Usuario.hasOne(UsuarioEmpresas, { 
-    foreignKey: 'usu_documento', 
-    sourceKey: 'usu_documento',
-    as: 'empresasAsignadas'
-});
+    Usuario.hasOne(UsuarioEmpresas, {
+        foreignKey: 'usu_documento',
+        sourceKey: 'usu_documento',
+        as: 'empresasAsignadas'
+    });
 
-UsuarioEmpresas.belongsTo(Usuario, { 
-    foreignKey: 'usu_documento', 
-    targetKey: 'usu_documento',
-    as: 'usuario'
-});
+    UsuarioEmpresas.belongsTo(Usuario, {
+        foreignKey: 'usu_documento',
+        targetKey: 'usu_documento',
+        as: 'usuario'
+    });
 
-preoperacionalesModels.belongsTo(Prestamos, {
-    foreignKey: 'idViaje',
-    targetKey: 'pre_id',
-    as: 'prestamo'
-});
+    preoperacionalesModels.belongsTo(Prestamos, {
+        foreignKey: 'idViaje',
+        targetKey: 'pre_id',
+        as: 'prestamo'
+    });
 
-Prestamos.hasMany(preoperacionalesModels, {
-    foreignKey: 'idViaje', 
-    sourceKey: 'pre_id',
-    as: 'preoperacionales'
-});
+    Prestamos.hasMany(preoperacionalesModels, {
+        foreignKey: 'idViaje',
+        sourceKey: 'pre_id',
+        as: 'preoperacionales'
+    });
 
-NotificacionRenta.belongsTo(Prestamos, { 
-  foreignKey: 'not_renta_id', 
-  targetKey: 'pre_id',
-  as: 'renta'
-});
-Prestamos.hasMany(NotificacionRenta, { 
-  foreignKey: 'not_renta_id', 
-  sourceKey: 'pre_id',
-  as: 'notificaciones'
-});
+    NotificacionRenta.belongsTo(Prestamos, {
+        foreignKey: 'not_renta_id',
+        targetKey: 'pre_id',
+        as: 'renta'
+    });
+    Prestamos.hasMany(NotificacionRenta, {
+        foreignKey: 'not_renta_id',
+        sourceKey: 'pre_id',
+        as: 'notificaciones'
+    });
 
-NotificacionRenta.belongsTo(Usuario, { 
-  foreignKey: 'not_usuario', 
-  targetKey: 'usu_documento',
-  as: 'usuario'
-});
+    NotificacionRenta.belongsTo(Usuario, {
+        foreignKey: 'not_usuario',
+        targetKey: 'usu_documento',
+        as: 'usuario'
+    });
 
-EmpresaLogro.belongsTo(Logros, {
-    foreignKey: 'idLogro',
-    targetKey: 'id_logro',
-    as: 'logro'
-});
+    EmpresaLogro.belongsTo(Logros, {
+        foreignKey: 'idLogro',
+        targetKey: 'id_logro',
+        as: 'logro'
+    });
 
-TokenMsn.belongsTo(Usuario, { 
-    foreignKey: 'documento', 
-    targetKey: 'usu_documento',
-    as: 'bc_usuario'
-});
+    TokenMsn.belongsTo(Usuario, {
+        foreignKey: 'documento',
+        targetKey: 'usu_documento',
+        as: 'bc_usuario'
+    });
 
-Usuario.hasOne(TokenMsn, { 
-    foreignKey: 'documento', 
-    sourceKey: 'usu_documento',
-    as: 'token_info'
-});
+    Usuario.hasOne(TokenMsn, {
+        foreignKey: 'documento',
+        sourceKey: 'usu_documento',
+        as: 'token_info'
+    });
 
-CompartidoViajeActivo.hasMany(CompartidoSolicitud, {
-    foreignKey: 'idViajeSolicitado',
-    sourceKey: '_id'
-});
+    CompartidoViajeActivo.hasMany(CompartidoSolicitud, {
+        foreignKey: 'idViajeSolicitado',
+        sourceKey: '_id'
+    });
 
-CompartidoSolicitud.belongsTo(CompartidoViajeActivo, {
-    foreignKey: 'idViajeSolicitado',
-    targetKey: '_id'
-});
+    CompartidoSolicitud.belongsTo(CompartidoViajeActivo, {
+        foreignKey: 'idViajeSolicitado',
+        targetKey: '_id'
+    });
 
-CompartidoConductor.hasMany(CompartidoVehiculos, {
-    foreignKey: 'idpropietario',
-    sourceKey: '_id'
-});
+    CompartidoConductor.hasMany(CompartidoVehiculos, {
+        foreignKey: 'idpropietario',
+        sourceKey: '_id'
+    });
 
-CompartidoVehiculos.belongsTo(CompartidoConductor, {
-    foreignKey: 'idpropietario',
-    targetKey: '_id'
-});
-
-
-AgendamientoOperario.belongsTo(Usuario, {
-    foreignKey: 'operario_id',
-    targetKey: 'usu_documento'
-});
-
-Usuario.hasMany(AgendamientoOperario, {
-    foreignKey: 'operario_id',
-    sourceKey: 'usu_documento'
-});
-
-AgendamientoOperario.belongsTo(Estacion, {
-    foreignKey: 'estacion_id',
-    targetKey: 'est_estacion'
-});
-
-Estacion.hasMany(AgendamientoOperario, {
-    foreignKey: 'estacion_id',
-    sourceKey: 'est_estacion'
-});
-
-AgendamientoOperario.belongsTo(Empresa, {
-    foreignKey: 'empresa_id',
-    targetKey: 'emp_id'
-});
-
-Empresa.hasMany(AgendamientoOperario, {
-    foreignKey: 'empresa_id',
-    sourceKey: 'emp_id'
-});
-
-AgendamientoIncumplido.belongsTo(Usuario, {
-    foreignKey: 'operario_id',
-    targetKey: 'usu_documento'
-});
-
-Usuario.hasMany(AgendamientoIncumplido, {
-    foreignKey: 'operario_id',
-    sourceKey: 'usu_documento'
-});
-
-AgendamientoIncumplido.belongsTo(Estacion, {
-    foreignKey: 'estacion_id',
-    targetKey: 'est_estacion'
-});
-
-Estacion.hasMany(AgendamientoIncumplido, {
-    foreignKey: 'estacion_id',
-    sourceKey: 'est_estacion'
-});
-
-AgendamientoIncumplido.belongsTo(Empresa, {
-    foreignKey: 'empresa_id',
-    targetKey: 'emp_id'
-});
-
-Empresa.hasMany(AgendamientoIncumplido, {
-    foreignKey: 'empresa_id',
-    sourceKey: 'emp_id'
-});
-
-AgendamientoIncumplido.belongsTo(AgendamientoOperario, {
-    foreignKey: 'agendamiento_id',
-    targetKey: 'id'
-});
-
-AgendamientoOperario.hasMany(AgendamientoIncumplido, {
-    foreignKey: 'agendamiento_id',
-    sourceKey: 'id'
-});
-
-RegistroPP.belongsTo(Prestamos, { foreignKey: 'idViaje', targetKey: 'pre_id', as: 'prestamo' });
-RegistroPP.belongsTo(Bicicleta, { foreignKey: 'vehiculo', targetKey: 'bic_id', as: 'bicicleta' });
-RegistroPP.belongsTo(Usuario, { foreignKey: 'usuario', targetKey: 'usu_documento', as: 'usuarioData' });
-Bicicleta.hasMany(RegistroPP, { foreignKey: 'vehiculo', sourceKey: 'bic_id', as: 'registros' });
+    CompartidoVehiculos.belongsTo(CompartidoConductor, {
+        foreignKey: 'idpropietario',
+        targetKey: '_id'
+    });
 
 
-//Nuevos
-Bicicleta.belongsTo(Candado, { foreignKey: 'can_id', targetKey: 'can_id' });
-Candado.hasOne(Bicicleta, { foreignKey: 'can_id', sourceKey: 'can_id' });
+    AgendamientoOperario.belongsTo(Usuario, {
+        foreignKey: 'operario_id',
+        targetKey: 'usu_documento'
+    });
 
-Usuario.belongsTo(UsuarioCredencial, { foreignKey: 'usu_documento', targetKey: 'uc_usuario_id' });
-UsuarioCredencial.hasOne(Usuario, { foreignKey: 'usu_documento', sourceKey: 'uc_usuario_id' });
+    Usuario.hasMany(AgendamientoOperario, {
+        foreignKey: 'operario_id',
+        sourceKey: 'usu_documento'
+    });
 
-UsuarioRol.belongsTo(Usuario, { foreignKey: 'ur_usuario_id', targetKey: 'usu_documento' });
-Usuario.hasMany(UsuarioRol, { foreignKey: 'ur_usuario_id', sourceKey: 'usu_documento' });
+    AgendamientoOperario.belongsTo(Estacion, {
+        foreignKey: 'estacion_id',
+        targetKey: 'est_estacion'
+    });
 
-UsuarioRol.belongsTo(Rol, { foreignKey: 'ur_rol_id', targetKey: 'rol_id' });
-Rol.hasMany(UsuarioRol, { foreignKey: 'ur_rol_id', sourceKey: 'rol_id' });
+    Estacion.hasMany(AgendamientoOperario, {
+        foreignKey: 'estacion_id',
+        sourceKey: 'est_estacion'
+    });
 
-RolPermiso.belongsTo(Rol, { foreignKey: 'rp_rol_id', targetKey: 'rol_id' });
-Rol.hasMany(RolPermiso, { foreignKey: 'rp_rol_id', sourceKey: 'rol_id' });
+    AgendamientoOperario.belongsTo(Empresa, {
+        foreignKey: 'empresa_id',
+        targetKey: 'emp_id'
+    });
 
-RolPermiso.belongsTo(Permiso, { foreignKey: 'rp_permiso_id', targetKey: 'per_id' });
-Permiso.hasMany(RolPermiso, { foreignKey: 'rp_permiso_id', sourceKey: 'per_id' });
+    Empresa.hasMany(AgendamientoOperario, {
+        foreignKey: 'empresa_id',
+        sourceKey: 'emp_id'
+    });
 
-UsuarioPermiso.belongsTo(Usuario, { foreignKey: 'up_usuario_id', targetKey: 'usu_documento' });
-Usuario.hasMany(UsuarioPermiso, { foreignKey: 'up_usuario_id', sourceKey: 'usu_documento' });
+    AgendamientoIncumplido.belongsTo(Usuario, {
+        foreignKey: 'operario_id',
+        targetKey: 'usu_documento'
+    });
 
-UsuarioPermiso.belongsTo(Permiso, { foreignKey: 'up_permiso_id', targetKey: 'per_id' });
-Permiso.hasMany(UsuarioPermiso, { foreignKey: 'up_permiso_id', sourceKey: 'per_id' });
+    Usuario.hasMany(AgendamientoIncumplido, {
+        foreignKey: 'operario_id',
+        sourceKey: 'usu_documento'
+    });
 
-TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento' });
-Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento' });
+    AgendamientoIncumplido.belongsTo(Estacion, {
+        foreignKey: 'estacion_id',
+        targetKey: 'est_estacion'
+    });
+
+    Estacion.hasMany(AgendamientoIncumplido, {
+        foreignKey: 'estacion_id',
+        sourceKey: 'est_estacion'
+    });
+
+    AgendamientoIncumplido.belongsTo(Empresa, {
+        foreignKey: 'empresa_id',
+        targetKey: 'emp_id'
+    });
+
+    Empresa.hasMany(AgendamientoIncumplido, {
+        foreignKey: 'empresa_id',
+        sourceKey: 'emp_id'
+    });
+
+    AgendamientoIncumplido.belongsTo(AgendamientoOperario, {
+        foreignKey: 'agendamiento_id',
+        targetKey: 'id'
+    });
+
+    AgendamientoOperario.hasMany(AgendamientoIncumplido, {
+        foreignKey: 'agendamiento_id',
+        sourceKey: 'id'
+    });
+
+    RegistroPP.belongsTo(Prestamos, { foreignKey: 'idViaje', targetKey: 'pre_id', as: 'prestamo' });
+    RegistroPP.belongsTo(Bicicleta, { foreignKey: 'vehiculo', targetKey: 'bic_id', as: 'bicicleta' });
+    RegistroPP.belongsTo(Usuario, { foreignKey: 'usuario', targetKey: 'usu_documento', as: 'usuarioData' });
+    Bicicleta.hasMany(RegistroPP, { foreignKey: 'vehiculo', sourceKey: 'bic_id', as: 'registros' });
+
+
+    //Nuevos    // Bicicleta.belongsTo(Candado, { foreignKey: 'can_id', targetKey: 'can_id' });
+    // Candado.hasOne(Bicicleta, { foreignKey: 'can_id', sourceKey: 'can_id' });
+
+    Usuario.belongsTo(UsuarioCredencial, { foreignKey: 'usu_documento', targetKey: 'uc_usuario_id' });
+    UsuarioCredencial.hasOne(Usuario, { foreignKey: 'usu_documento', sourceKey: 'uc_usuario_id' });
+
+    UsuarioRol.belongsTo(Usuario, { foreignKey: 'ur_usuario_id', targetKey: 'usu_documento' });
+    Usuario.hasMany(UsuarioRol, { foreignKey: 'ur_usuario_id', sourceKey: 'usu_documento' });
+
+    UsuarioRol.belongsTo(Rol, { foreignKey: 'ur_rol_id', targetKey: 'rol_id' });
+    Rol.hasMany(UsuarioRol, { foreignKey: 'ur_rol_id', sourceKey: 'rol_id' });
+
+    RolPermiso.belongsTo(Rol, { foreignKey: 'rp_rol_id', targetKey: 'rol_id' });
+    Rol.hasMany(RolPermiso, { foreignKey: 'rp_rol_id', sourceKey: 'rol_id' });
+
+    RolPermiso.belongsTo(Permiso, { foreignKey: 'rp_permiso_id', targetKey: 'per_id' });
+    Permiso.hasMany(RolPermiso, { foreignKey: 'rp_permiso_id', sourceKey: 'per_id' });
+
+    UsuarioPermiso.belongsTo(Usuario, { foreignKey: 'up_usuario_id', targetKey: 'usu_documento' });
+    Usuario.hasMany(UsuarioPermiso, { foreignKey: 'up_usuario_id', sourceKey: 'usu_documento' });
+
+    UsuarioPermiso.belongsTo(Permiso, { foreignKey: 'up_permiso_id', targetKey: 'per_id' });
+    Permiso.hasMany(UsuarioPermiso, { foreignKey: 'up_permiso_id', sourceKey: 'per_id' });
+
+    TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento' });
+    Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento' });
 
 
     module.exports = models

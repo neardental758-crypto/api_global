@@ -5,12 +5,15 @@ const username = process.env.MYSQL_USER;
 const password = process.env.MYSQL_PASSWORD;
 const host = process.env.MYSQL_HOST;
 
+const port = process.env.MYSQL_PORT || 3306;
+
 const sequelize = new Sequelize(
     database,
     username,
     password,
     {
         host,
+        port,
         dialect: 'mysql',
         define: {
             timestamps: false, //la marca de tiempo en false para que no la tome en ningún modelo (createdAt, updatedAt)
@@ -19,7 +22,7 @@ const sequelize = new Sequelize(
     }
 )
 
-const dbConnectMysql = async () =>{
+const dbConnectMysql = async () => {
     try {
         await sequelize.authenticate();
         console.log('Mysql conexión correcta');

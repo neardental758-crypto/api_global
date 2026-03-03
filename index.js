@@ -15,17 +15,16 @@ app.use(cors());
 app.use(express.json())
 app.use(express.static("storage"))
 
-const portsql = 3002;
+const port = process.env.PORT || 3002;
 cron;
 startSessionCleanup();
 startAgendamientosCleanup();
 
 //RUTAS
-//usamos la peticion del cliente y requerimos el index de cada ruta
 app.use("/api", require("./routes/"));
 
-app.listen(portsql, ()=>{
-    console.log('Mysql por el puerto : '+ portsql);
+app.listen(port, () => {
+    console.log(`🚀 API lista por el puerto: ${port}`);
 });
 
-dbConnectMysql() ;
+dbConnectMysql();

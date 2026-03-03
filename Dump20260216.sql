@@ -880,7 +880,7 @@ CREATE TABLE `bc_usuarios` (
   `coorCasa` json DEFAULT NULL,
   `coorTrabajo` json DEFAULT NULL,
   `usu_img` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
-  `usu_creacion` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
+  `usu_created_at` varchar(45) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
   `usu_prueba` tinyint DEFAULT NULL,
   `usu_modulo_carpooling` tinyint DEFAULT '0',
   `usu_rol_dash` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,

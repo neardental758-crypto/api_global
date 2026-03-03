@@ -11,7 +11,7 @@ const { Op, Sequelize } = require('sequelize');
 const getItems = async (req, res) => {
     try {
         const data = await indicadoresModels.findAll({});
-        res.send({data});
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_ITEM_INDICADORESS");
     }
@@ -22,7 +22,7 @@ const getItemTrip = async (req, res) => {
         req = matchedData(req)
         const { ind_viaje } = req
         const data = await indicadoresModels.findOne({
-            where:  {ind_viaje: ind_viaje}
+            where: { ind_viaje: ind_viaje }
         });
         res.send(data);
     } catch (e) {
@@ -35,7 +35,7 @@ const getItemsUser = async (req, res) => {
         req = matchedData(req)
         const { ind_usuario } = req
         const data = await indicadoresModels.findAll({
-            where:  {ind_usuario: ind_usuario}
+            where: { ind_usuario: ind_usuario }
         });
         res.send(data);
     } catch (e) {
@@ -59,10 +59,10 @@ const patchItem = async (req, res) => {
     const ind_id = req.params.ind_id;
     try {
         const data = await indicadoresModels.update(
-        objetoACambiar,
-        {
-            where: { ind_id: ind_id }
-        })
+            objetoACambiar,
+            {
+                where: { ind_id: ind_id }
+            })
         res.send('ok');
     } catch (error) {
         httpError(res, `ERROR_UPDATE_ESTADO_INDICADORES `);
@@ -89,7 +89,7 @@ const getItemsWithPrestamos = async (req, res) => {
                             'usu_documento',
                             'usu_empresa',
                             'usu_viajes',
-                            'usu_creacion',
+                            'usu_created_at',
                         ],
                         include: [{
                             model: Empresa,
@@ -110,7 +110,7 @@ const getItemsWithPrestamos = async (req, res) => {
                 ]
             }]
         });
-        res.send({data});
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_INDICADORES_WITH_PRESTAMOS");
     }
@@ -150,7 +150,7 @@ const getItemsWithPrestamosByEmpresa = async (req, res) => {
                             'usu_documento',
                             'usu_empresa',
                             'usu_viajes',
-                            'usu_creacion',
+                            'usu_created_at',
                         ],
                         include: [{
                             model: Empresa,
@@ -191,19 +191,19 @@ const getItemWithPrestamo = async (req, res) => {
                 }
             }]
         });
-        
+
         if (!data) {
             return res.status(404).send({ error: "INDICADOR_NOT_FOUND" });
         }
-        
-        res.send({data});
+
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_INDICADOR_WITH_PRESTAMO");
     }
 };
 
-const deleteItem = (req, res) => {};
+const deleteItem = (req, res) => { };
 
 module.exports = {
-    getItems, getItemTrip, getItemsUser, createItem, deleteItem, patchItem, getItemsWithPrestamos,getItemWithPrestamo, getItemsWithPrestamosByEmpresa
+    getItems, getItemTrip, getItemsUser, createItem, deleteItem, patchItem, getItemsWithPrestamos, getItemWithPrestamo, getItemsWithPrestamosByEmpresa
 }
