@@ -203,6 +203,125 @@ const getItemsByOrganization = async (req, res) => {
 
 const deleteItem = (req, res) => { };
 
+const getComentariosByEmpresaEstacion = async (req, res) => {
+    try {
+        const { empresa_id, estacion_id } = req.params;
+
+        let page = 1;
+        let limit = 10;
+        let bicicletaFiltro = null;
+
+        if (req.query && req.query.filter) {
+            try {
+                const rawFilter = req.query.filter;
+                const filter = typeof rawFilter === 'string' ? JSON.parse(rawFilter) : rawFilter;
+                page = parseInt(filter.page) || 1;
+                limit = parseInt(filter.limit) || 10;
+                bicicletaFiltro = filter.bicicleta || filter.vehiculo || null;
+            } catch (e) {
+                console.error('[registrospp][comentarios] error parseando req.query.filter', {
+                    filter: req.query.filter,
+                    error: e && e.message ? e.message : e,
+                });
+            }
+        }
+
+        if (!bicicletaFiltro && req.query) {
+            bicicletaFiltro = req.query.bicicleta || req.query.vehiculo || null;
+        }
+
+        if (bicicletaFiltro !== null && bicicletaFiltro !== undefined) {
+            bicicletaFiltro = String(bicicletaFiltro).trim();
+            if (bicicletaFiltro === '') {
+                bicicletaFiltro = null;
+            }
+        }
+
+        const offset = (page - 1) * limit;
+
+        const empresa = await Empresa.findOne({
+            where: { emp_id: empresa_id }
+        });
+
+        if (!empresa) {
+            return res.send({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+        }
+
+        let bicicletaWhere = {};
+        if (estacion_id && estacion_id !== 'undefined') {
+            bicicletaWhere.bic_estacion = estacion_id;
+        }
+
+        const bicicletaRequired = Object.keys(bicicletaWhere).length > 0;
+
+        const whereBusquedaVehiculo = bicicletaFiltro
+            ? {
+                [Op.or]: [
+                    { vehiculo: { [Op.like]: `%${bicicletaFiltro}%` } },
+                    sequelize.where(
+                        sequelize.col('bicicleta.bic_numero'),
+                        { [Op.like]: `%${bicicletaFiltro}%` }
+                    ),
+                ],
+            }
+            : undefined;
+
+        const { count, rows } = await RegistrosPPModels.findAndCountAll({
+            where: {
+                comentario: { [Op.ne]: null },
+                [Op.and]: [
+                    sequelize.where(
+                        sequelize.fn('TRIM', sequelize.col('comentario')),
+                        { [Op.ne]: '' }
+                    ),
+                    ...(whereBusquedaVehiculo ? [whereBusquedaVehiculo] : []),
+                ]
+            },
+            include: [
+                {
+                    model: Bicicleta,
+                    as: 'bicicleta',
+                    attributes: ['bic_id', 'bic_numero', 'bic_estacion'],
+                    where: bicicletaRequired ? bicicletaWhere : undefined,
+                    required: bicicletaRequired,
+                },
+                {
+                    model: Usuario,
+                    as: 'usuarioData',
+                    attributes: ['usu_documento', 'usu_nombre', 'usu_empresa'],
+                    where: { usu_empresa: empresa.emp_nombre },
+                    required: true,
+                },
+            ],
+            order: [['fecha', 'DESC']],
+            limit,
+            offset,
+            distinct: true,
+            subQuery: false,
+        });
+
+        const totalPages = Math.ceil(count / limit);
+        res.send({
+            data: rows,
+            pagination: {
+                total: count,
+                page,
+                limit,
+                totalPages,
+            },
+        });
+    } catch (error) {
+        console.error('Error completo:', error);
+        httpError(res, 'ERROR_GET_REGISTROS_PP_COMENTARIOS');
+    }
+};
+
 module.exports = {
-    getItems, getItem, createItem, updateItem, deleteItem, getItemsByOrganization
+    getItems,
+    getItem,
+    createItem,
+    updateItem,
+    deleteItem,
+    getItemsByOrganization,
+    getComentariosByEmpresaEstacion,
 }

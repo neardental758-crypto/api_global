@@ -46,7 +46,11 @@ const createItem = async (req, res) => {
     try {
         const { body } = req
         const data = await contratosModels.create(body)
-        res.send('ok')
+        res.status(200).json({
+            status: 200,
+            data,
+            message: "CONTRATO_CREATED"
+        })
     } catch (error) {
         httpError(res, "ERROR_CREATE_CONTRATOS")
     }
@@ -97,12 +101,15 @@ const patchItem = async (req, res) => {
                     message: "Update CONTRATOS"
                 });
             } else {
-                res.json({
-                    message: "Update CONTRATOS failed: No rows affected"
+                res.status(200).json({
+                    status: 200,
+                    data: updatedData,
+                    message: "Update CONTRATOS: No rows affected"
                 });
             }
         } else {
-            res.json({
+            res.status(404).json({
+                status: 404,
                 message: "Update CONTRATOS failed: Item not found"
             });
         }

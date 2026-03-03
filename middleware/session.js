@@ -5,6 +5,15 @@ const authMiddleware = (requiredPermissions = []) => {
     return async (req, res, next) => {
       try {
         if (!req.headers.authorization) {
+          const isLoginRequest =
+            req.method === "POST" &&
+            (req.path === "/login" || req.path.endsWith("/login"));
+
+          if (isLoginRequest) {
+            next();
+            return;
+          }
+
           httpError(res, "NEED_SESSION", 401);
           return;
         }

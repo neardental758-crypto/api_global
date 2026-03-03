@@ -9,8 +9,19 @@ const validatorCreateUser = [
 ];
 
 const validatorLogin = [
-    check("usu_documento").exists().notEmpty(),
+    check("password").exists().notEmpty(),
+    check("user").optional().isString(),
+    check("email").optional().isString(),
+    check("usu_documento").optional().isString(),
     (req, res, next) =>{
+        const b = req && req.body ? req.body : {};
+        const hasIdentifier =
+            (b && typeof b.user !== "undefined" && String(b.user).trim()) ||
+            (b && typeof b.email !== "undefined" && String(b.email).trim()) ||
+            (b && typeof b.usu_documento !== "undefined" && String(b.usu_documento).trim());
+        if (!hasIdentifier) {
+            return res.status(400).send({ error: "DATOS_INCOMPLETOS" });
+        }
         return validateResults(req, res, next);
     }
 ];

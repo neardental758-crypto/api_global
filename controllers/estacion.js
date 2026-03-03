@@ -6,7 +6,9 @@ const nombre_cortezza = 'Cortezza MDN';
 
 const getItems = async (req, res) => {
     try {
-      const data = await estacionModels.findAll({});
+      const data = await estacionModels.findAll({
+        attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion"],
+      });
       res.send({ data });
     } catch (error) {
       console.error('Error en getItems:', error);
@@ -40,9 +42,14 @@ const getItemEmpresa = async (req, res) => {
     try {
         req = matchedData(req)
         const { est_empresa } = req
-        const data = await estacionModels.findAll({ where: { est_empresa: est_empresa}});
+        console.log("[bc_estaciones] getItemEmpresa est_empresa=", est_empresa);
+        const data = await estacionModels.findAll({
+            attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion"],
+            where: { est_empresa: est_empresa }
+        });
         res.send({data});
     } catch (e) {
+        console.error("[bc_estaciones] ERROR getItemEmpresa:", e);
         httpError(res, "ERROR_GET_ESTACION_EMPRESA")
     }
 };

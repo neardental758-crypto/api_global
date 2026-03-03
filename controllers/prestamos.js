@@ -192,7 +192,7 @@ const getItemAllPrestamoFinalizados3g = async (req, res) => {
       },
       {
         model: Usuario,
-        attributes: ['usu_calificacion', 'usu_ciudad', 'usu_recorrido', 'usu_empresa', 'usu_nombre', 'usu_documento'],
+        attributes: ['usu_ciudad', 'usu_recorrido', 'usu_empresa', 'usu_nombre', 'usu_documento'],
         where: {
           usu_prueba: 0
         }
@@ -294,7 +294,7 @@ const getItemAllPrestamoFinalizados4g = async (req, res) => {
       },
       {
         model: Usuario,
-        attributes: ['usu_calificacion', 'usu_ciudad', 'usu_recorrido', 'usu_empresa', 'usu_nombre', 'usu_documento'],
+        attributes: ['usu_ciudad', 'usu_recorrido', 'usu_empresa', 'usu_nombre', 'usu_documento'],
         where: {
           usu_prueba: 0
         }
@@ -722,6 +722,130 @@ const getItemsForReportsByOrganization = async (req, res) => {
     return res.status(500).json({
       success: false,
       error: error.message
+    });
+  }
+};
+
+const getItemsForReportsByOrganization5g = async (req, res) => {
+  try {
+    const { organizationId } = req.params;
+    let stationName = req.query.stationName;
+    let startDate = req.query.startDate;
+    let endDate = req.query.endDate;
+
+    if (startDate && startDate.includes("?")) startDate = startDate.split("?")[0];
+    if (endDate && endDate.includes("?")) endDate = endDate.split("?")[0];
+    if (stationName && stationName.includes("?")) stationName = stationName.split("?")[0];
+
+    if (!organizationId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la organización",
+      });
+    }
+
+    const whereCondition = literal(`
+  (
+      (pre_retiro_fecha BETWEEN '${startDate}' AND '${endDate} 23:59:59')
+      OR (
+          pre_retiro_fecha < '${startDate}'
+          AND pre_estado IN ('FINALIZADA', 'FINALIZADO')
+          AND pre_devolucion_fecha >= '${startDate}'
+      )
+      OR (
+          pre_estado IN ('ACTIVA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA', 'PRESTADA')
+          AND pre_retiro_fecha < '${endDate} 23:59:59'
+      )
+  )
+  AND (
+      pre_dispositivo IN ('web_pp', 'web_pe')
+      OR 
+      (
+          pre_dispositivo NOT IN ('web_pp', 'web_pe')
+          AND (
+              pre_retiro_fecha IS NULL
+              OR pre_devolucion_fecha IS NULL
+              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 900
+          )
+      )
+  )
+  AND pre_modulo = '5g'
+`);
+
+    const queryOptions = {
+      attributes: [
+        "pre_id",
+        "pre_usuario",
+        "pre_bicicleta",
+        "pre_retiro_fecha",
+        "pre_devolucion_fecha",
+        "pre_retiro_estacion",
+        "pre_devolucion_estacion",
+        "pre_estado",
+        "pre_dispositivo",
+        "pre_duracion",
+        "pre_modulo",
+      ],
+      include: [
+        {
+          model: Bicicleta,
+          attributes: ["bic_id", "bic_numero", "bic_nombre", "bic_estacion"],
+          required: false,
+        },
+        {
+          model: Usuario,
+          attributes: ["usu_documento", "usu_nombre", "usu_empresa", "usu_genero"],
+          required: true,
+          where: { usu_prueba: 0 },
+          include: [
+            {
+              model: Empresa,
+              attributes: ["emp_id", "emp_nombre"],
+              required: true,
+              where: stationName ? {} : { emp_id: organizationId },
+            },
+          ],
+        },
+        {
+          model: Estacion,
+          attributes: ["est_estacion", "est_empresa", "est_direccion"],
+          required: stationName ? true : false,
+          where: stationName ? { est_estacion: stationName } : {},
+        },
+        {
+          model: Comentarios,
+          attributes: ["com_calificacion", "com_comentario"],
+          required: false,
+        },
+      ],
+      where: whereCondition,
+      order: [["pre_id", "DESC"]],
+    };
+
+    const loans = await prestamosModels.findAll(queryOptions);
+
+    const filteredLoans = loans.filter((loan) => {
+      const empresaUsuario =
+        loan.bc_usuario &&
+        loan.bc_usuario.bc_empresa &&
+        loan.bc_usuario.bc_empresa.emp_nombre;
+      const empresaEstacion = loan.bc_estacione && loan.bc_estacione.est_empresa;
+
+      if (!loan.bc_estacione || !empresaEstacion) return true;
+      if (empresaEstacion === empresaUsuario) return true;
+
+      return false;
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: filteredLoans,
+      totalRecords: filteredLoans.length,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      error: error.message,
     });
   }
 };
@@ -1537,5 +1661,5 @@ module.exports = {
      getItemAllPrestamoFinalizados3g, getItemAllPrestamoFinalizados4g, patchItem,
       getItemByBicicleta, getItem_cortezza, getItems_cortezza, getItemAllPrestamoActivos_cortezza,
        getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza, getItemPrestamosUsuario_cortezza,
-    getItemsForReports,getItemsForReportsByOrganization,getItemsForReportsByStation,finalizeLoan, finalizeLoan4g,
+    getItemsForReports,getItemsForReportsByOrganization,getItemsForReportsByOrganization5g,getItemsForReportsByStation,finalizeLoan, finalizeLoan4g,
 }

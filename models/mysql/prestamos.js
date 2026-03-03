@@ -51,7 +51,12 @@ const Prestamos = sequelize.define(
         },
         pre_estado: {
             type: DataTypes.STRING,
+        },
+        pre_modulo: {
+            type: DataTypes.STRING,
+            allowNull: true
         }
-    });
+    }
+);
 
-    module.exports = Prestamos;
+module.exports = Prestamos;

@@ -6,7 +6,7 @@ const { getItems, createItem, getItem, getItemPrestamoActivo, getItemPrestamoAct
     getItemAllPrestamoFinalizados4g, patchItem, getItem_cortezza, getItems_cortezza,getMetricsForOrganization,
      getItemAllPrestamoActivos_cortezza, getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza,
       getItemPrestamosUsuario_cortezza, getItemByBicicleta,getItemsForReports, getItemsForReportsByStation,
-       getItemsForReportsByOrganization, finalizeLoan, finalizeLoan4g} = require('../controllers/prestamos');
+       getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, finalizeLoan, finalizeLoan4g} = require('../controllers/prestamos');
 const authMiddleware = require('../middleware/session');
 const checkPrestamoActivo = require("../middleware/checkPrestamoActivo");
 
@@ -45,6 +45,7 @@ router.put("/updateState", authMiddleware(["all"]), validatorGetPrestamos, updat
 
 router.get("/reports", authMiddleware(["all"]), getItemsForReports);
 router.get("/reports/organization/:organizationId", authMiddleware(["all"]), validatorOrganizationId, getItemsForReportsByOrganization);
+router.get("/reports/5g/organization/:organizationId", authMiddleware(["all"]), validatorOrganizationId, getItemsForReportsByOrganization5g);
 router.get("/reports/station/:stationId", authMiddleware(["all"]), validatorStationId, getItemsForReportsByStation);
 
 router.patch("/finalize/3g/:pre_id", 

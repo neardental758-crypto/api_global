@@ -1,10 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const { validatorCreate, validatorGet } = require('../validators/registroppValidators');
-const { getItems, getItem, createItem,  updateItem, getItemsByOrganization} = require('../controllers/registrospp');
+const { getItems, getItem, createItem,  updateItem, getItemsByOrganization,getComentariosByEmpresaEstacion} = require('../controllers/registrospp');
 const authMiddleware = require('../middleware/session');
 
 router.get("/", authMiddleware(["all"]), validatorGet, getItems);
+
+router.get(
+  "/comentarios/empresa/:empresa_id/estacion/:estacion_id",
+  authMiddleware(["all"]),
+  getComentariosByEmpresaEstacion,
+);
+
+router.get(
+  "/comentarios/empresa/:empresa_id",
+  authMiddleware(["all"]),
+  getComentariosByEmpresaEstacion,
+);
 
 router.get("/:id", authMiddleware(["all"]), validatorGet, getItem);
 

@@ -10,13 +10,16 @@ const {
     getItem,
     createItem,
     updateItem,
-    deleteItem
+    deleteItem,
+    login
 } = require('../controllers/usuariosCredenciales');
 const authMiddleware = require('../middleware/session');
 
 router.get("/", authMiddleware(['all']), getItems);
 
 router.get("/usuario/:uc_usuario_id", authMiddleware(['all']), validatorGetCredencial, getItem);
+
+router.post("/login", authMiddleware(['all']), login);
 
 router.post("/", authMiddleware(['all']), validatorCreateCredencial, createItem);
 

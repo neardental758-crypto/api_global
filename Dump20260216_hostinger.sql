@@ -627,6 +627,7 @@ CREATE TABLE `bc_prestamos` (
   `pre_duracion` mediumtext NOT NULL,
   `pre_dispositivo` varchar(255) NOT NULL,
   `pre_estado` varchar(255) NOT NULL,
+  `pre_modulo` varchar(255) NOT NULL,
   PRIMARY KEY (`pre_id`),
   KEY `prestamo-retiro-estacion` (`pre_retiro_estacion`),
   KEY `prestamo-devolucion-estacion` (`pre_devolucion_estacion`),
@@ -1941,6 +1942,25 @@ CREATE TABLE `vp_vehiculos_usuario` (
 --
 -- Table structure for table `vp_viajes`
 --
+
+DROP TABLE IF EXISTS `contratos`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `contratos` (
+  `_id` varchar(45) NOT NULL,
+  `nombre` varchar(45) DEFAULT NULL,
+  `idOrganizacion` varchar(45) NOT NULL,
+  `fechaInicio` varchar(45) DEFAULT NULL,
+  `fechaFinal` varchar(45) DEFAULT NULL,
+  `vecesRenovado` int NOT NULL DEFAULT '0',
+  `fechaUpdate` varchar(45) DEFAULT NULL,
+  `estado` varchar(45) DEFAULT NULL,
+  `notaContrato` varchar(100) DEFAULT NULL,
+  PRIMARY KEY (`_id`),
+  KEY `contrato-empresa_idx` (`idOrganizacion`),
+  CONSTRAINT `contrato-empresa` FOREIGN KEY (`idOrganizacion`) REFERENCES `bc_empresas` (`emp_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `vp_viajes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
