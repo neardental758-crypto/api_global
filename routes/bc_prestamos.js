@@ -1,18 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { validatorCreatePrestamos, validatorGetPrestamos, validatorStationId, validatorUpdatePrestamos,
-     validatorGetUsuario, validatorOrganizationId, validatorFinalizeLoan, validatorFinalizeLoan4g} = require('../validators/prestamosValidators');
-const { getItems, createItem, getItem, getItemPrestamoActivo, getItemPrestamoActivoPP, getItemPrestamosUsuario, updateItem, getItemAllPrestamoActivos, getItemAllPrestamoFinalizados, getItemsToDate, getItemAllPrestamoFinalizados3g, 
-    getItemAllPrestamoFinalizados4g, patchItem, getItem_cortezza, getItems_cortezza,getMetricsForOrganization,
-     getItemAllPrestamoActivos_cortezza, getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza,
-      getItemPrestamosUsuario_cortezza, getItemByBicicleta,getItemsForReports, getItemsForReportsByStation,
-       getItemsForReportsByOrganization, finalizeLoan, finalizeLoan4g} = require('../controllers/prestamos');
+    validatorGetUsuario, validatorOrganizationId, validatorFinalizeLoan, validatorFinalizeLoan4g, validatorFinalizeLoan5g } = require('../validators/prestamosValidators');
+const { getItems, createItem, getItem, getItemPrestamoActivo, getItemPrestamoActivoPP, getItemPrestamosUsuario, updateItem, getItemAllPrestamoActivos, getItemAllPrestamoFinalizados, getItemsToDate, getItemAllPrestamoFinalizados3g,
+    getItemAllPrestamoFinalizados4g, patchItem, getItem_cortezza, getItems_cortezza, getMetricsForOrganization,
+    getItemAllPrestamoActivos_cortezza, getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza,
+    getItemPrestamosUsuario_cortezza, getItemByBicicleta, getItemsForReports, getItemsForReportsByStation,
+    getItemsForReportsByOrganization, finalizeLoan, finalizeLoan4g, finalizeLoan5g } = require('../controllers/prestamos');
 const authMiddleware = require('../middleware/session');
 const checkPrestamoActivo = require("../middleware/checkPrestamoActivo");
 
-router.get("/",authMiddleware(["all"]), getItems);
+router.get("/", authMiddleware(["all"]), getItems);
 
-router.get("/id/:pre_id", authMiddleware(["all"]), validatorGetPrestamos, getItem); 
+router.get("/id/:pre_id", authMiddleware(["all"]), validatorGetPrestamos, getItem);
 
 router.get("/prestamoActivos", authMiddleware(["all"]), getItemAllPrestamoActivos);
 router.get("/prestamoFinalizados", authMiddleware(["all"]), getItemAllPrestamoFinalizados);
@@ -47,21 +47,27 @@ router.get("/reports", authMiddleware(["all"]), getItemsForReports);
 router.get("/reports/organization/:organizationId", authMiddleware(["all"]), validatorOrganizationId, getItemsForReportsByOrganization);
 router.get("/reports/station/:stationId", authMiddleware(["all"]), validatorStationId, getItemsForReportsByStation);
 
-router.patch("/finalize/3g/:pre_id", 
-    authMiddleware(["all"]), 
-    validatorFinalizeLoan, 
+router.patch("/finalize/3g/:pre_id",
+    authMiddleware(["all"]),
+    validatorFinalizeLoan,
     finalizeLoan
 );
 
-router.patch("/finalize/4g/:pre_id", 
-    authMiddleware(["all"]), 
-    validatorFinalizeLoan4g, 
+router.patch("/finalize/4g/:pre_id",
+    authMiddleware(["all"]),
+    validatorFinalizeLoan4g,
     finalizeLoan4g
+);
+
+router.patch("/finalize/5g/:pre_id",
+    authMiddleware(["all"]),
+    validatorFinalizeLoan5g,
+    finalizeLoan5g
 );
 
 //Router cortezza
 router.get("/all", authMiddleware(["external"]), getItems_cortezza);
-router.get("/id_cortezza/:pre_id", authMiddleware(["external"]), validatorGetPrestamos, getItem_cortezza); 
+router.get("/id_cortezza/:pre_id", authMiddleware(["external"]), validatorGetPrestamos, getItem_cortezza);
 router.get("/prestamoActivos_cortezza", authMiddleware(["external"]), getItemAllPrestamoActivos_cortezza);
 router.get("/prestamoFinalizados_cortezza", authMiddleware(["external"]), getItemAllPrestamoFinalizados_cortezza);
 router.get("/prestamoActivo_cortezza/:pre_usuario", authMiddleware(["external"]), validatorGetUsuario, getItemPrestamoActivo_cortezza);

@@ -30,7 +30,6 @@ router.post("/login_app", loginApp);
 router.post("/updateusuario", authMiddleware(["all"]), validatorUpdateUser, updateItem);
 
 router.post("/login", authMiddleware(["all"]), validatorLogin, login);
-router.post("/login_app", loginApp);
 
 router.post("/correo_password_ride", correo__password_ride);
 router.post("/correo_password_meb", correo__password_meb);
