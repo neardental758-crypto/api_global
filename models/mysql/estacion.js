@@ -54,9 +54,6 @@ const Estacion = sequelize.define(
         est_descripcion: {
             type: DataTypes.STRING
         },
-        est_alertas: {
-            type: DataTypes.STRING,
-        },
         est_rebalanceo: {
             type: DataTypes.STRING,
         },

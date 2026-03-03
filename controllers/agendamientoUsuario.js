@@ -19,23 +19,23 @@ const getItems = async (req, res) => {
                     model: Usuario,
                     attributes: ['usu_documento', 'usu_nombre'],
                     as: 'Agenda',
-                    include:[{
+                    include: [{
                         model: Empresa,
                         attributes: ['emp_id'],
-                        where : {
-                            emp_id : organization
+                        where: {
+                            emp_id: organization
                         }
-                      }],
-                      required : true
-                },{
+                    }],
+                    required: true
+                }, {
                     model: Practica,
                     attributes: ['practica_cupos', 'practica_estacion', 'practica_fecha'],
                     as: 'Practica',
-                    include:[{
+                    include: [{
                         model: Usuario,
                         attributes: ['usu_documento', 'usu_nombre'],
                         as: 'Funcionario',
-                      }],
+                    }],
                 }
             ]
         });
@@ -53,7 +53,7 @@ const getItem = async (req, res) => {
         const data = await agendamientoUsuariosModels.findAll({
             include: [{
                 model: Usuario,
-                attributes: ['usu_documento', 'usu_nombre', 'usu_creacion'],
+                attributes: ['usu_documento', 'usu_nombre', 'usu_created_at'],
                 as: 'Agenda',
             }],
             where: {
@@ -61,10 +61,13 @@ const getItem = async (req, res) => {
                 agendado_resultado: 'APROBADO'
             }
         });
-        // if(user.usu_creacion < "2024-10-24T00:00:00.000Z"){
-        if(user.usu_creacion < "2024-12-24T00:00:00.000Z"){
-            res.send({ "data" : ["Es", "usuario", "antiguo"] });
-        }else{
+        // Comparar convirtiendo a objetos Date
+        const creationDate = new Date(user.usu_created_at);
+        const cutoffDate = new Date("2024-07-01T00:00:00.000Z");
+
+        if (creationDate < cutoffDate) {
+            res.send({ "data": ["Es", "usuario", "antiguo"] });
+        } else {
             res.send({ data });
         }
     } catch (e) {
@@ -76,7 +79,7 @@ const createItem = async (req, res) => {
     try {
         const { body } = req;
         const data = await agendamientoUsuariosModels.create(body)
-        res.send({data})
+        res.send({ data })
     } catch (error) {
         httpError(res, `ERROR_GET_ITEM_AGENDAMIENTO_ACTIVO `)
     }
@@ -104,33 +107,33 @@ const createItem = async (req, res) => {
 
 
 const patchItem = async (req, res) => {
-  try {
-    
-    const objetoACambiar = req.body;
-    const _id = req.params._id;
-    
-    if (!_id) {
-      return res.status(400).send('ID requerido');
+    try {
+
+        const objetoACambiar = req.body;
+        const _id = req.params._id;
+
+        if (!_id) {
+            return res.status(400).send('ID requerido');
+        }
+
+        const data = await agendamientoUsuariosModels.update(
+            objetoACambiar,
+            {
+                where: {
+                    _id: _id
+                }
+            }
+        );
+
+        if (data[0] === 0) {
+            return res.status(404).send('No se encontró el registro para actualizar');
+        }
+
+        res.send('ok');
+    } catch (error) {
+        console.error('Error en patchItem:', error);
+        httpError(res, "ERROR_AGENDAMIENTO_ACTIVO");
     }
-    
-    const data = await agendamientoUsuariosModels.update(
-      objetoACambiar, 
-      { 
-        where: { 
-          _id: _id 
-        } 
-      }
-    );
-    
-    if (data[0] === 0) {
-      return res.status(404).send('No se encontró el registro para actualizar');
-    }
-    
-    res.send('ok');
-  } catch (error) {
-    console.error('Error en patchItem:', error);
-    httpError(res, "ERROR_AGENDAMIENTO_ACTIVO");
-  }
 };
 
 const getActivePractise = async (req, res) => {
@@ -138,24 +141,24 @@ const getActivePractise = async (req, res) => {
         req = req.params
         const { _id } = req
         const data = await agendamientoUsuariosModels.findAll({
-            where : {
-                agendado_cedula : _id,
-                agendado_estado : 'ACTIVA'
+            where: {
+                agendado_cedula: _id,
+                agendado_estado: 'ACTIVA'
             },
             include: [
                 {
                     model: Practica,
                     attributes: ['practica_cupos', 'practica_estacion', 'practica_fecha'],
                     as: 'Practica',
-                    include:[{
+                    include: [{
                         model: Estacion,
                         attributes: ['est_direccion', 'est_descripcion'],
                         as: 'Estacion',
-                      }],
+                    }],
                 }
             ]
         });
-        res.send({data});
+        res.send({ data });
     } catch (e) {
         httpError(res, `ERROR_GET_ITEM_AGENDAMIENTO_ACTIVO ${e}`)
     }
@@ -179,141 +182,141 @@ const updateItem = async (req, res) => {
 };
 
 const sendApprovalEmail = async (req, res) => {
- try {
-   const { to, userName, userDocument, adminName, practiceDate } = req.body;
+    try {
+        const { to, userName, userDocument, adminName, practiceDate } = req.body;
 
-   const usuario = await Usuario.findOne({
-     where: { usu_documento: userDocument },
-     include: [{
-       model: Empresa,
-       attributes: ['emp_nombre', 'aplicacion'],
-       as: 'bc_empresa'
-     }]
-   });
-
-   if (!usuario || !usuario.bc_empresa) {
-     return res.status(404).send({ 
-       success: false, 
-       error: 'Usuario o empresa no encontrados' 
-     });
-   }
-
-     await Usuario.update(
-     { usu_habilitado: "1" },
-     { where: { usu_documento: userDocument } }
-   );
-
-   let emailConfig, templateConfig;
-   
-   if (usuario.bc_empresa.aplicacion === 'meb') {
-     emailConfig = {
-       user: 'experiencia@mejorenbici.com',
-       pass: 'udtl ydrk pvyf oiev'
-     };
-     templateConfig = {
-       primaryColor: '#4CAF50',
-       secondaryColor: '#66BB6A',
-       tertiaryColor: '#2E7D32',
-       shapeColor: '#81C784',
-       logoSrc: 'cid:logoMejorEnBici',
-       companyName: 'Mejor en Bici'
-     };
-   } else if (usuario.bc_empresa.aplicacion === 'ride') {
-     emailConfig = {
-       user: 'Servicio@bicyclecapital.co',
-       pass: 'fyam ecci wqby fhaj' 
-     };
-     templateConfig = {
-       primaryColor: '#FFD700',
-       secondaryColor: '#FFC107',
-       tertiaryColor: '#F9A825',
-       shapeColor: '#B0B0B0',
-       logoSrc: 'cid:logoBicycleCapital',
-       companyName: 'Bicycle Capital'
-     };
-   } else {
-     return res.status(400).send({ 
-       success: false, 
-       error: 'Aplicación no válida' 
-     });
-   }
-
-   const transporter = nodemailer.createTransport({
-     service: 'gmail',
-     auth: {
-       user: emailConfig.user,
-       pass: emailConfig.pass
-     }
-   });
-
-    const now = new Date();
-    const approvalDate = now.toLocaleDateString('es-CO', { 
-    timeZone: 'America/Bogota'
-    });
-    const approvalTime = now.toLocaleTimeString('es-CO', { 
-    timeZone: 'America/Bogota'
-    });
-   
-   // Validación y formateo de fecha de práctica
-   let formattedPracticeDate = null;
-   let practiceDateRow = '';
-   
-  if (practiceDate) {
-  try {
-    let dateObj = null;
-    
-    if (typeof practiceDate === 'string' && practiceDate.includes('/')) {
-      const parts = practiceDate.split(' ');
-      const datePart = parts[0];
-      const timePart = parts[1] || '00:00';
-      
-      const [day, month, year] = datePart.split('/');
-      const [hour, minute] = timePart.split(':');
-      
-      dateObj = new Date();
-      dateObj.setFullYear(parseInt(year), parseInt(month) - 1, parseInt(day));
-      dateObj.setHours(parseInt(hour) || 0, parseInt(minute) || 0, 0, 0);
-    } else if (typeof practiceDate === 'string' && practiceDate.includes('T')) {
-      dateObj = new Date(practiceDate);
-    } else if (typeof practiceDate === 'string' && practiceDate.includes('-')) {
-      const dateParts = practiceDate.split('-');
-      if (dateParts.length === 3) {
-        dateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
-      }
-    }
-    
-    if (dateObj && !isNaN(dateObj.getTime())) {
-      formattedPracticeDate = dateObj.toLocaleDateString('es-CO', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        timeZone: 'America/Bogota'
-      });
-      
-      const hasTime = practiceDate.includes(':');
-      if (hasTime) {
-        const timeFormatted = dateObj.toLocaleTimeString('es-CO', {
-          hour: '2-digit',
-          minute: '2-digit',
-          timeZone: 'America/Bogota',
-          hour12: false
+        const usuario = await Usuario.findOne({
+            where: { usu_documento: userDocument },
+            include: [{
+                model: Empresa,
+                attributes: ['emp_nombre', 'aplicacion'],
+                as: 'bc_empresa'
+            }]
         });
-        formattedPracticeDate += ` ${timeFormatted}`;
-      }
-      
-      practiceDateRow = `
+
+        if (!usuario || !usuario.bc_empresa) {
+            return res.status(404).send({
+                success: false,
+                error: 'Usuario o empresa no encontrados'
+            });
+        }
+
+        await Usuario.update(
+            { usu_habilitado: "1" },
+            { where: { usu_documento: userDocument } }
+        );
+
+        let emailConfig, templateConfig;
+
+        if (usuario.bc_empresa.aplicacion === 'meb') {
+            emailConfig = {
+                user: 'experiencia@mejorenbici.com',
+                pass: 'udtl ydrk pvyf oiev'
+            };
+            templateConfig = {
+                primaryColor: '#4CAF50',
+                secondaryColor: '#66BB6A',
+                tertiaryColor: '#2E7D32',
+                shapeColor: '#81C784',
+                logoSrc: 'cid:logoMejorEnBici',
+                companyName: 'Mejor en Bici'
+            };
+        } else if (usuario.bc_empresa.aplicacion === 'ride') {
+            emailConfig = {
+                user: 'Servicio@bicyclecapital.co',
+                pass: 'fyam ecci wqby fhaj'
+            };
+            templateConfig = {
+                primaryColor: '#FFD700',
+                secondaryColor: '#FFC107',
+                tertiaryColor: '#F9A825',
+                shapeColor: '#B0B0B0',
+                logoSrc: 'cid:logoBicycleCapital',
+                companyName: 'Bicycle Capital'
+            };
+        } else {
+            return res.status(400).send({
+                success: false,
+                error: 'Aplicación no válida'
+            });
+        }
+
+        const transporter = nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+                user: emailConfig.user,
+                pass: emailConfig.pass
+            }
+        });
+
+        const now = new Date();
+        const approvalDate = now.toLocaleDateString('es-CO', {
+            timeZone: 'America/Bogota'
+        });
+        const approvalTime = now.toLocaleTimeString('es-CO', {
+            timeZone: 'America/Bogota'
+        });
+
+        // Validación y formateo de fecha de práctica
+        let formattedPracticeDate = null;
+        let practiceDateRow = '';
+
+        if (practiceDate) {
+            try {
+                let dateObj = null;
+
+                if (typeof practiceDate === 'string' && practiceDate.includes('/')) {
+                    const parts = practiceDate.split(' ');
+                    const datePart = parts[0];
+                    const timePart = parts[1] || '00:00';
+
+                    const [day, month, year] = datePart.split('/');
+                    const [hour, minute] = timePart.split(':');
+
+                    dateObj = new Date();
+                    dateObj.setFullYear(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    dateObj.setHours(parseInt(hour) || 0, parseInt(minute) || 0, 0, 0);
+                } else if (typeof practiceDate === 'string' && practiceDate.includes('T')) {
+                    dateObj = new Date(practiceDate);
+                } else if (typeof practiceDate === 'string' && practiceDate.includes('-')) {
+                    const dateParts = practiceDate.split('-');
+                    if (dateParts.length === 3) {
+                        dateObj = new Date(parseInt(dateParts[0]), parseInt(dateParts[1]) - 1, parseInt(dateParts[2]));
+                    }
+                }
+
+                if (dateObj && !isNaN(dateObj.getTime())) {
+                    formattedPracticeDate = dateObj.toLocaleDateString('es-CO', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        timeZone: 'America/Bogota'
+                    });
+
+                    const hasTime = practiceDate.includes(':');
+                    if (hasTime) {
+                        const timeFormatted = dateObj.toLocaleTimeString('es-CO', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'America/Bogota',
+                            hour12: false
+                        });
+                        formattedPracticeDate += ` ${timeFormatted}`;
+                    }
+
+                    practiceDateRow = `
         <div class="detail-row">
           <span class="detail-label">Fecha de práctica: </span>
           <span class="detail-value"> ${formattedPracticeDate}</span>
         </div>
       `;
-    }
-  } catch (error) {
-    console.log('Error parsing practice date:', error);
-  }
-}
+                }
+            } catch (error) {
+                console.log('Error parsing practice date:', error);
+            }
+        }
 
-   const emailTemplate = `
+        const emailTemplate = `
      <!DOCTYPE html>
      <html lang="es">
      <head>
@@ -950,58 +953,58 @@ const sendApprovalEmail = async (req, res) => {
      </html>
    `;
 
-   const attachments = [
-     {
-       filename: 'bici.jpg',
-       path: './assets/bici.jpg',
-       cid: 'personBike'
-     },
-     {
-       filename: 'logo_dorado.png',
-       path: './assets/logo_dorado.png',
-       cid: 'goldenBadge'
-     }
-   ];
+        const attachments = [
+            {
+                filename: 'bici.jpg',
+                path: './assets/bici.jpg',
+                cid: 'personBike'
+            },
+            {
+                filename: 'logo_dorado.png',
+                path: './assets/logo_dorado.png',
+                cid: 'goldenBadge'
+            }
+        ];
 
-   if (usuario.bc_empresa.aplicacion === 'meb') {
-     attachments.push({
-       filename: 'logo_mejorenbici.png',
-       path: './assets/logo_mejorenbici.png',
-       cid: 'logoMejorEnBici'
-     });
-   } else if (usuario.bc_empresa.aplicacion === 'ride') {
-     attachments.push({
-       filename: 'logo_bicycapital.png',
-       path: './assets/logo_bicycapital.png',
-       cid: 'logoBicycleCapital'
-     });
-   }
+        if (usuario.bc_empresa.aplicacion === 'meb') {
+            attachments.push({
+                filename: 'logo_mejorenbici.png',
+                path: './assets/logo_mejorenbici.png',
+                cid: 'logoMejorEnBici'
+            });
+        } else if (usuario.bc_empresa.aplicacion === 'ride') {
+            attachments.push({
+                filename: 'logo_bicycapital.png',
+                path: './assets/logo_bicycapital.png',
+                cid: 'logoBicycleCapital'
+            });
+        }
 
-   await transporter.sendMail({
-     from: emailConfig.user,
-     to: to,
-     subject: `🚲 Certificado de Movilidad Sostenible - ${userName} - ${usuario.bc_empresa.emp_nombre}`,
-     html: emailTemplate,
-     attachments: attachments
-   });
+        await transporter.sendMail({
+            from: emailConfig.user,
+            to: to,
+            subject: `🚲 Certificado de Movilidad Sostenible - ${userName} - ${usuario.bc_empresa.emp_nombre}`,
+            html: emailTemplate,
+            attachments: attachments
+        });
 
-   res.send({ 
-     success: true, 
-     message: 'Email enviado correctamente',
-     fromEmail: emailConfig.user,
-     empresa: usuario.bc_empresa.emp_nombre
-   });
-   
- } catch (error) {
-   console.error('Error enviando email:', error);
-   res.status(500).send({ 
-     success: false, 
-     error: 'Error al enviar email: ' + error.message
-   });
- }
+        res.send({
+            success: true,
+            message: 'Email enviado correctamente',
+            fromEmail: emailConfig.user,
+            empresa: usuario.bc_empresa.emp_nombre
+        });
+
+    } catch (error) {
+        console.error('Error enviando email:', error);
+        res.status(500).send({
+            success: false,
+            error: 'Error al enviar email: ' + error.message
+        });
+    }
 };
 
-const deleteItem = (req, res) => {};
+const deleteItem = (req, res) => { };
 
 module.exports = {
     getItems, getItem, createItem, updateItem, deleteItem, patchItem, getActivePractise, sendApprovalEmail

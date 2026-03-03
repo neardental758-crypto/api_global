@@ -11,7 +11,7 @@ const { Op, Sequelize } = require('sequelize');
 const getItems = async (req, res) => {
     try {
         const data = await preoperacionalesModels.findAll({});
-        res.send({data});
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_ITEM_PREOPERACIONALES");
     }
@@ -22,7 +22,7 @@ const getItemTrip = async (req, res) => {
         req = matchedData(req)
         const { idViaje } = req
         const data = await preoperacionalesModels.findOne({
-            where:  {idViaje: idViaje}
+            where: { idViaje: idViaje }
         });
         res.send(data);
     } catch (e) {
@@ -35,7 +35,7 @@ const getItemsUser = async (req, res) => {
         req = matchedData(req)
         const { usuario } = req
         const data = await preoperacionalesModels.findAll({
-            where:  {usuario: usuario}
+            where: { usuario: usuario }
         });
         res.send(data);
     } catch (e) {
@@ -59,10 +59,10 @@ const patchItem = async (req, res) => {
     const id = req.params.id;
     try {
         const data = await preoperacionalesModels.update(
-        objetoACambiar,
-        {
-            where: { id: id }
-        })
+            objetoACambiar,
+            {
+                where: { id: id }
+            })
         res.send('ok');
     } catch (error) {
         httpError(res, `ERROR_UPDATE_ESTADO_PREOPERACIONALES `);
@@ -89,7 +89,7 @@ const getItemsWithPrestamos = async (req, res) => {
                             'usu_documento',
                             'usu_empresa',
                             'usu_viajes',
-                            'usu_creacion',
+                            'usu_created_at',
                         ],
                         include: [{
                             model: Empresa,
@@ -110,7 +110,7 @@ const getItemsWithPrestamos = async (req, res) => {
                 ]
             }]
         });
-        res.send({data});
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_PREOPERACIONALES_WITH_PRESTAMOS");
     }
@@ -150,7 +150,7 @@ const getItemsWithPrestamosByEmpresa = async (req, res) => {
                             'usu_documento',
                             'usu_empresa',
                             'usu_viajes',
-                            'usu_creacion',
+                            'usu_created_at',
                         ],
                         include: [{
                             model: Empresa,
@@ -191,12 +191,12 @@ const getItemWithPrestamo = async (req, res) => {
                 }
             }]
         });
-        
+
         if (!data) {
             return res.status(404).send({ error: "INDICADOR_NOT_FOUND" });
         }
-        
-        res.send({data});
+
+        res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_INDICADOR_WITH_PRESTAMO");
     }
@@ -243,8 +243,8 @@ const getPreoperacionalesByPrestamosIds = async (req, res) => {
     }
 };
 
-const deleteItem = (req, res) => {};
+const deleteItem = (req, res) => { };
 
 module.exports = {
-    getItems, getItemTrip, getItemsUser, createItem, deleteItem, patchItem, getItemsWithPrestamos,getItemWithPrestamo, getItemsWithPrestamosByEmpresa, getPreoperacionalesByPrestamosIds
+    getItems, getItemTrip, getItemsUser, createItem, deleteItem, patchItem, getItemsWithPrestamos, getItemWithPrestamo, getItemsWithPrestamosByEmpresa, getPreoperacionalesByPrestamosIds
 }
