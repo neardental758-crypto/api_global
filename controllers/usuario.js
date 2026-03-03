@@ -13,7 +13,6 @@ const { sequelize } = require('../config/mysql');
 const { QueryTypes } = require('sequelize');
 const _id_cortezza = '627a8c9931feb31c33377d0e';
 const UsuarioEmpresas = require('../models/mysql/usuarios_empresas');
-const UsuarioRol = require('../models/mysql/usuariosRoles');
 const nodemailer = require("nodemailer");
 const { Op } = require('sequelize');
 const { randomUUID } = require('crypto');
@@ -279,25 +278,25 @@ const createUserComplete = async (req, res) => {
             });
         }
 
-    // 3.1 Verificar si el correo ya existe
-    const emailToCheck = body && body.email ? String(body.email).trim() : "";
-    if (emailToCheck) {
-      const rowsEmail = await sequelize.query(
-        "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
-        {
-          replacements: [emailToCheck],
-          type: QueryTypes.SELECT,
-          transaction: transaction,
-        },
-      );
-      if (rowsEmail && rowsEmail[0] && rowsEmail[0].usu_documento) {
-        await transaction.rollback();
-        return res.status(409).send({
-          error: "EMAIL_YA_EXISTE",
-          message: "El correo ya está registrado en el sistema",
-        });
-      }
-    }
+        // 3.1 Verificar si el correo ya existe
+        const emailToCheck = body && body.email ? String(body.email).trim() : "";
+        if (emailToCheck) {
+            const rowsEmail = await sequelize.query(
+                "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
+                {
+                    replacements: [emailToCheck],
+                    type: QueryTypes.SELECT,
+                    transaction: transaction,
+                },
+            );
+            if (rowsEmail && rowsEmail[0] && rowsEmail[0].usu_documento) {
+                await transaction.rollback();
+                return res.status(409).send({
+                    error: "EMAIL_YA_EXISTE",
+                    message: "El correo ya está registrado en el sistema",
+                });
+            }
+        }
 
         // 4. Crear primero el registro extendido (para satisfacer la clave foránea)
         await registroExtModels.create({
@@ -317,40 +316,40 @@ const createUserComplete = async (req, res) => {
         }, { transaction });
 
         // 5. Crear el usuario con el nombre de empresa correcto
-    const nombre = body && body.nombre ? String(body.nombre) : "";
-    const apellido = body && body.apellido ? String(body.apellido) : "";
-    const fullName = (nombre + " " + apellido).trim();
-    const email = body && body.email ? String(body.email) : "";
-    const birthdate = body && body.birthdate ? String(body.birthdate) : "";
-    const genero = body && body.genero ? String(body.genero) : "";
-    const usuImg = body && body.usu_img ? String(body.usu_img) : "";
-    const usuPrueba = body && typeof body.usu_prueba !== "undefined" ? body.usu_prueba : 0;
-    const habilitado = body && typeof body.usu_habilitado !== "undefined"
-      ? Number(body.usu_habilitado) === 1
-        ? 1
-        : 0
-      : body && body.accountState
-        ? String(body.accountState) === "active"
-          ? 1
-          : 0
-        : 1;
-    const cargo = body && body.position ? String(body.position) : "";
-    let cargoDireccionValida = null;
-    try {
-      cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
-    } catch (e) {
-      await transaction.rollback();
-      return res.status(400).send({
-        error: "USU_DIR_TRABAJO_INVALID",
-        message:
-          "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
-      });
-    }
+        const nombre = body && body.nombre ? String(body.nombre) : "";
+        const apellido = body && body.apellido ? String(body.apellido) : "";
+        const fullName = (nombre + " " + apellido).trim();
+        const email = body && body.email ? String(body.email) : "";
+        const birthdate = body && body.birthdate ? String(body.birthdate) : "";
+        const genero = body && body.genero ? String(body.genero) : "";
+        const usuImg = body && body.usu_img ? String(body.usu_img) : "";
+        const usuPrueba = body && typeof body.usu_prueba !== "undefined" ? body.usu_prueba : 0;
+        const habilitado = body && typeof body.usu_habilitado !== "undefined"
+            ? Number(body.usu_habilitado) === 1
+                ? 1
+                : 0
+            : body && body.accountState
+                ? String(body.accountState) === "active"
+                    ? 1
+                    : 0
+                : 1;
+        const cargo = body && body.position ? String(body.position) : "";
+        let cargoDireccionValida = null;
+        try {
+            cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
+        } catch (e) {
+            await transaction.rollback();
+            return res.status(400).send({
+                error: "USU_DIR_TRABAJO_INVALID",
+                message:
+                    "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
+            });
+        }
 
         const usuarioCreado = await usuarioModels.create({
             usu_documento: body.idNumber,
             usu_nombre: fullName || body.nombre,
-      usu_email: email,
+            usu_email: email,
             usu_empresa: empresa.emp_nombre, // Nombre exacto de la empresa
             usu_ciudad: "Dashboard",
             usu_habilitado: habilitado,
@@ -358,8 +357,8 @@ const createUserComplete = async (req, res) => {
             usu_viajes: 0,
             usu_edad: 0,
             usu_genero: genero || 'No especificado',
-      usu_fecha_nacimiento: birthdate,
-      usu_img: usuImg,
+            usu_fecha_nacimiento: birthdate,
+            usu_img: usuImg,
             usu_dir_trabajo: cargoDireccionValida,
             usu_dir_casa: 'No especificado',
             usu_recorrido: '0',
@@ -370,24 +369,24 @@ const createUserComplete = async (req, res) => {
             usu_modulo_carpooling: false
         }, { transaction });
 
-    // 5.1 Crear relación usuario-rol si viene rolId
-    const rolId = body && (body.rolId || body.ur_rol_id) ? (body.rolId || body.ur_rol_id) : null;
-    if (rolId) {
-      const urId = "ur-" + String(body.idNumber) + "-" + String(rolId);
-      const existingUr = await UsuarioRol.findByPk(urId, { transaction });
-      if (!existingUr) {
-        await UsuarioRol.create(
-          {
-            ur_id: urId,
-            ur_usuario_id: String(body.idNumber),
-            ur_rol_id: String(rolId),
-            ur_created_at: new Date(),
-            ur_updated_at: new Date(),
-          },
-          { transaction },
-        );
-      }
-    }
+        // 5.1 Crear relación usuario-rol si viene rolId
+        const rolId = body && (body.rolId || body.ur_rol_id) ? (body.rolId || body.ur_rol_id) : null;
+        if (rolId) {
+            const urId = "ur-" + String(body.idNumber) + "-" + String(rolId);
+            const existingUr = await UsuarioRol.findByPk(urId, { transaction });
+            if (!existingUr) {
+                await UsuarioRol.create(
+                    {
+                        ur_id: urId,
+                        ur_usuario_id: String(body.idNumber),
+                        ur_rol_id: String(rolId),
+                        ur_created_at: new Date(),
+                        ur_updated_at: new Date(),
+                    },
+                    { transaction },
+                );
+            }
+        }
 
         // 6. Confirmar la transacción
         await transaction.commit();

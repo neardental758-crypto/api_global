@@ -1799,5 +1799,5 @@ module.exports = {
   getItemAllPrestamoFinalizados3g, getItemAllPrestamoFinalizados4g, patchItem,
   getItemByBicicleta, getItem_cortezza, getItems_cortezza, getItemAllPrestamoActivos_cortezza,
   getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza, getItemPrestamosUsuario_cortezza,
-  getItemsForReports, getItemsForReportsByOrganization, getItemsForReportsByStation, finalizeLoan, finalizeLoan4g,
+  getItemsForReports, getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, getItemsForReportsByStation, finalizeLoan, finalizeLoan4g, finalizeLoan5g
 }
