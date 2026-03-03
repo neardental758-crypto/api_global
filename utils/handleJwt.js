@@ -26,6 +26,8 @@ const tokenSign_2 = async (user) => {
             iat: Math.floor(Date.now() / 1000), // Tiempo actual en segundos
             exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 365, // Expira en 365 días
             role: user.role, // Puedes agregar cualquier otro dato relevante
+            permissions: user.permissions,
+            userId: user.userId,
         },
         JWT_SECRET
     );

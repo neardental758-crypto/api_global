@@ -5,10 +5,12 @@ const Estacion = require('../models/mysql/estacion');
 const Extendido = require('../models/mysql/registroext');
 const Empresa = require('../models/mysql/empresa');
 const Agendados = require('../models/mysql/agendamientoUsuario');
+const UsuarioRol = require('../models/mysql/usuariosRoles');
 const { tokenSign, verifyToken, tokenSign_2 } = require('../utils/handleJwt')
 const { encrypt, compare } = require('../utils/handlePassword')
 const { httpError } = require('../utils/handleError');
 const { sequelize } = require('../config/mysql');
+const { QueryTypes } = require('sequelize');
 const _id_cortezza = '627a8c9931feb31c33377d0e';
 const UsuarioEmpresas = require('../models/mysql/usuarios_empresas');
 const UsuarioRol = require('../models/mysql/usuariosRoles');
@@ -18,6 +20,31 @@ const { randomUUID } = require('crypto');
 
 const registroExtModels = require('../models/mysql/registroext');
 const empresasModels = require('../models/mysql/empresa');
+
+const resolveEstacionDireccionOrThrow = async (direccion, transaction) => {
+    if (typeof direccion !== "string") {
+        throw new Error("USU_DIR_TRABAJO_REQUIRED");
+    }
+    const trimmed = direccion.trim();
+    if (!trimmed) {
+        throw new Error("USU_DIR_TRABAJO_REQUIRED");
+    }
+
+    const rows = await sequelize.query(
+        "SELECT est_direccion FROM bc_estaciones WHERE est_direccion = ? LIMIT 1",
+        {
+            replacements: [trimmed],
+            type: QueryTypes.SELECT,
+            transaction: transaction,
+        },
+    );
+
+    if (rows && rows[0] && rows[0].est_direccion) {
+        return trimmed;
+    }
+
+    throw new Error("USU_DIR_TRABAJO_NOT_FOUND");
+};
 /**
  * funcion getItems donde se requiere el modelo de esta collecion
  * utilizamos try catch para manejo de errores
@@ -70,10 +97,43 @@ const getItem = async (req, res) => {
     try {
         req = matchedData(req)
         const { usu_documento } = req
-        const data = await usuarioModels.findByPk(usu_documento);
-        const dataRegisterExtended = await registroextModels.findByPk(usu_documento);
+        // Evitar errores por desalineación modelo/tabla (columnas inexistentes)
+        // Consultamos únicamente las columnas necesarias para el dashboard.
+        const rows = await sequelize.query(
+            `SELECT 
+                usu_documento,
+                usu_nombre,
+                usu_empresa,
+                usu_ciudad,
+                usu_rol_dash,
+                usu_email,
+                usu_fecha_nacimiento,
+                usu_genero,
+                usu_dir_trabajo,
+                usu_img,
+                usu_prueba,
+                usu_habilitado
+             FROM bc_usuarios
+             WHERE usu_documento = :usu_documento
+             LIMIT 1`,
+            {
+                replacements: { usu_documento },
+                type: QueryTypes.SELECT,
+            }
+        );
+
+        const data = Array.isArray(rows) && rows.length ? rows[0] : null;
+
+        let dataRegisterExtended = null;
+        try {
+            dataRegisterExtended = await registroextModels.findByPk(usu_documento);
+        } catch (err) {
+            dataRegisterExtended = null;
+        }
+
         res.send({ data, dataRegisterExtended });
     } catch (e) {
+        console.error('ERROR_GET_USER getItem', { usu_documento: req?.usu_documento, error: e });
         httpError(res, `ERROR_GET_USER`)
     }
 };
@@ -219,6 +279,26 @@ const createUserComplete = async (req, res) => {
             });
         }
 
+    // 3.1 Verificar si el correo ya existe
+    const emailToCheck = body && body.email ? String(body.email).trim() : "";
+    if (emailToCheck) {
+      const rowsEmail = await sequelize.query(
+        "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
+        {
+          replacements: [emailToCheck],
+          type: QueryTypes.SELECT,
+          transaction: transaction,
+        },
+      );
+      if (rowsEmail && rowsEmail[0] && rowsEmail[0].usu_documento) {
+        await transaction.rollback();
+        return res.status(409).send({
+          error: "EMAIL_YA_EXISTE",
+          message: "El correo ya está registrado en el sistema",
+        });
+      }
+    }
+
         // 4. Crear primero el registro extendido (para satisfacer la clave foránea)
         await registroExtModels.create({
             idUser: body.idNumber,
@@ -237,25 +317,77 @@ const createUserComplete = async (req, res) => {
         }, { transaction });
 
         // 5. Crear el usuario con el nombre de empresa correcto
+    const nombre = body && body.nombre ? String(body.nombre) : "";
+    const apellido = body && body.apellido ? String(body.apellido) : "";
+    const fullName = (nombre + " " + apellido).trim();
+    const email = body && body.email ? String(body.email) : "";
+    const birthdate = body && body.birthdate ? String(body.birthdate) : "";
+    const genero = body && body.genero ? String(body.genero) : "";
+    const usuImg = body && body.usu_img ? String(body.usu_img) : "";
+    const usuPrueba = body && typeof body.usu_prueba !== "undefined" ? body.usu_prueba : 0;
+    const habilitado = body && typeof body.usu_habilitado !== "undefined"
+      ? Number(body.usu_habilitado) === 1
+        ? 1
+        : 0
+      : body && body.accountState
+        ? String(body.accountState) === "active"
+          ? 1
+          : 0
+        : 1;
+    const cargo = body && body.position ? String(body.position) : "";
+    let cargoDireccionValida = null;
+    try {
+      cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
+    } catch (e) {
+      await transaction.rollback();
+      return res.status(400).send({
+        error: "USU_DIR_TRABAJO_INVALID",
+        message:
+          "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
+      });
+    }
+
         const usuarioCreado = await usuarioModels.create({
             usu_documento: body.idNumber,
-            usu_nombre: body.nombre,
+            usu_nombre: fullName || body.nombre,
+      usu_email: email,
             usu_empresa: empresa.emp_nombre, // Nombre exacto de la empresa
             usu_ciudad: "Dashboard",
-            usu_habilitado: 1,
+            usu_habilitado: habilitado,
             usu_calificacion: 5,
             usu_viajes: 0,
             usu_edad: 0,
-            usu_genero: 'No especificado',
-            usu_dir_trabajo: 'dir trabajo',
+            usu_genero: genero || 'No especificado',
+      usu_fecha_nacimiento: birthdate,
+      usu_img: usuImg,
+            usu_dir_trabajo: cargoDireccionValida,
             usu_dir_casa: 'No especificado',
             usu_recorrido: '0',
             usu_roles_carpooling: body.rol_dash,
             usu_rol_dash: body.rol_dash,
             usu_created_at: body.creacion || new Date().toISOString(),
-            usu_prueba: "0",
+            usu_prueba: Number(usuPrueba) === 1 ? 1 : 0,
             usu_modulo_carpooling: false
         }, { transaction });
+
+    // 5.1 Crear relación usuario-rol si viene rolId
+    const rolId = body && (body.rolId || body.ur_rol_id) ? (body.rolId || body.ur_rol_id) : null;
+    if (rolId) {
+      const urId = "ur-" + String(body.idNumber) + "-" + String(rolId);
+      const existingUr = await UsuarioRol.findByPk(urId, { transaction });
+      if (!existingUr) {
+        await UsuarioRol.create(
+          {
+            ur_id: urId,
+            ur_usuario_id: String(body.idNumber),
+            ur_rol_id: String(rolId),
+            ur_created_at: new Date(),
+            ur_updated_at: new Date(),
+          },
+          { transaction },
+        );
+      }
+    }
 
         // 6. Confirmar la transacción
         await transaction.commit();
@@ -358,14 +490,46 @@ const patchItem = async (req, res) => {
     const updates = req.body;
 
     try {
+        if (updates && Object.prototype.hasOwnProperty.call(updates, "password") && !Object.prototype.hasOwnProperty.call(updates, "usu_password")) {
+            updates.usu_password = updates.password;
+            delete updates.password;
+        }
+
+        if (updates && Object.prototype.hasOwnProperty.call(updates, "usu_password")) {
+            const rawPwd = updates.usu_password;
+            if (typeof rawPwd !== "string" || !rawPwd.trim()) {
+                return res.status(400).json({
+                    success: false,
+                    error: "USU_PASSWORD_REQUIRED",
+                    message: "La contraseña es requerida.",
+                });
+            }
+            updates.usu_password = await encrypt(String(rawPwd));
+            updates.usu_updated_at = new Date();
+        }
+
+        if (updates && Object.prototype.hasOwnProperty.call(updates, "usu_dir_trabajo")) {
+            try {
+                updates.usu_dir_trabajo = await resolveEstacionDireccionOrThrow(updates.usu_dir_trabajo);
+            } catch (e) {
+                return res.status(400).json({
+                    success: false,
+                    error: "USU_DIR_TRABAJO_INVALID",
+                    message:
+                        "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
+                });
+            }
+        }
+
         const [affectedRows] = await usuarioModels.update(updates, {
             where: { usu_documento }
         });
 
         if (affectedRows === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'No se realizaron cambios en el registro.'
+            return res.status(200).json({
+                success: true,
+                message: 'Sin cambios (usuario ya estaba actualizado).',
+                affectedRows
             });
         }
 
@@ -405,7 +569,7 @@ const patchOrganization = async (req, res) => {
             }
         );
         if (data[0] === 0) {
-            return res.status(404).json({ error: 'Usuario no encontrado o no actualizado' });
+            return res.status(200).json({ message: 'Sin cambios (empresa ya actualizada).', data });
         }
         res.json({ message: 'Usuario actualizado correctamente', data });
     } catch (error) {
@@ -435,6 +599,7 @@ const getUsersByOrganization = async (req, res) => {
         const filterFechaDesde = params.filterFechaDesde || "";
         const filterFechaHasta = params.filterFechaHasta || "";
         const filterEstacion = params.filterEstacion || "";
+        const roleId = params.roleId || "";
         const sortColumn = params.sortColumn || "";
         const sortDirection = params.sortDirection || "asc";
 
@@ -492,6 +657,15 @@ const getUsersByOrganization = async (req, res) => {
                 required: false
             }
         ];
+
+        if (roleId) {
+            includeClause.push({
+                model: UsuarioRol,
+                attributes: [],
+                where: { ur_rol_id: String(roleId) },
+                required: true,
+            });
+        }
 
         if (filterEstacion) {
             includeClause[0].where = { est_estacion: filterEstacion };
@@ -554,31 +728,47 @@ const getUsersByOrganization = async (req, res) => {
 };
 const login = async (req, res) => {
     try {
-        req = matchedData(req)//limpiamos la data
-        const user = await usuarioModels.findOne({ email: req.email })
-            .select('password email rol name');//filtramos el documento por el email
-        if (!user) {
-            //si no existe msn y se salga
-            httpError(res, "USER_NOT_EXISTS", 404)
-            return
+        const body = matchedData(req);
+        const identifier = body && (body.user || body.email || body.usu_documento)
+            ? String(body.user || body.email || body.usu_documento).trim()
+            : "";
+        const password = body && body.password ? String(body.password) : "";
+
+        if (!identifier || !password) {
+            return res.status(400).send({ error: "DATOS_INCOMPLETOS" });
         }
-        //creamos variables con la contraseña del documento filtrado
-        const hashPassword = user.get('password');
-        //comparamos la contraseña que llegua desde el requerimiento con la filtrada del documento
-        const check = await compare(req.password, hashPassword)
-        if (!check) {
-            httpError(res, "PASSWORD_INVALID", 401)
-            return
+
+        const where = identifier.includes("@")
+            ? { usu_email: identifier }
+            : { usu_documento: identifier };
+
+        const userRow = await usuarioModels.findOne({ where });
+
+        if (!userRow) {
+            return res.status(404).send({ error: "USER_NOT_EXISTS" });
         }
-        //se crea una constante para construir la respuesta donde la password no se muestre
-        user.set('password', undefined, { strict: false })
-        const data = {
-            token: await tokenSign(user),
-            user
+
+        const hashPassword = userRow.get("usu_password");
+        if (!hashPassword) {
+            return res.status(401).send({ error: "PASSWORD_INVALID" });
         }
-        res.send({ data })
+
+        const ok = await compare(password, String(hashPassword));
+        if (!ok) {
+            return res.status(401).send({ error: "PASSWORD_INVALID" });
+        }
+
+        const userId = String(userRow.get("usu_documento"));
+        const token = await tokenSign_2({
+            role: "admin",
+            permissions: ["all"],
+            userId: userId,
+        });
+
+        return res.send({ token, id_user: userId });
     } catch (e) {
-        httpError(res, "ERROR_LOGIN");
+        console.error("ERROR_LOGIN bc_usuarios:", e);
+        return httpError(res, "ERROR_LOGIN", 500);
     }
 };
 

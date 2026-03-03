@@ -36,11 +36,11 @@ router.post("/correo_password_meb", correo__password_meb);
 
 // router.post("/loginCortezza", generateTokenForOrganization);
 
-router.patch("/:usu_documento", authMiddleware(["all"]), validatorPatch, patchItem);  ///error revisar
-
 router.patch("/empresa/:usu_documento", authMiddleware(["all"]), validatorPatch, patchOrganization);
 
-router.post('/create_user_complete', authMiddleware(["all"]), createUserComplete);
+router.patch("/:usu_documento", authMiddleware(["all"]), validatorPatch, patchItem);  ///error revisar
+
+router.post('/create_user_complete',authMiddleware(["all"]), createUserComplete);
 
 router.get('/operarios', authMiddleware(["all"]), getOperarios);
 

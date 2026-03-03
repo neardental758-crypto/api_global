@@ -2,6 +2,37 @@
 
 const { usuarioModels, UsuarioEmpresas , empresaModels } = require('../models');
 
+const normalizeEmpresaIds = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+        try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) return parsed;
+            return [raw];
+        } catch (e) {
+            return [raw];
+        }
+    }
+    return [];
+};
+
+const resolveEmpresaNombre = async (empresaId) => {
+    if (!empresaId) return '';
+
+    const empresa = await empresaModels.findOne({
+        where: { emp_id: empresaId }
+    });
+    if (empresa && empresa.emp_nombre) return empresa.emp_nombre;
+
+    const empresaByNombre = await empresaModels.findOne({
+        where: { emp_nombre: empresaId }
+    });
+    if (empresaByNombre && empresaByNombre.emp_nombre) return empresaByNombre.emp_nombre;
+
+    return String(empresaId);
+};
+
 // Controlador
 const getAllUsuariosEmpresas = async (req, res) => {
     try {
@@ -16,12 +47,10 @@ const getAllUsuariosEmpresas = async (req, res) => {
         });
 
         const processedData = await Promise.all(data.map(async (item) => {
+            const empresaIds = normalizeEmpresaIds(item.empresa_ids);
             const empresaNames = await Promise.all(
-                item.empresa_ids.map(async (empresaId) => {
-                    const empresa = await empresaModels.findOne({
-                        where: { emp_id: empresaId }
-                    });
-                    return empresa ? empresa.emp_nombre : `ID: ${empresaId}`;
+                empresaIds.map(async (empresaId) => {
+                    return await resolveEmpresaNombre(empresaId);
                 })
             );
 
@@ -29,7 +58,7 @@ const getAllUsuariosEmpresas = async (req, res) => {
                 id: item.id,
                 usu_documento: item.usu_documento,
                 usu_nombre: item.usuario ? item.usuario.usu_nombre : 'Usuario no encontrado',
-                empresa_ids: item.empresa_ids,
+                empresa_ids: empresaIds,
                 empresa_names: empresaNames,
                 created_at: item.created_at,
                 updated_at: item.updated_at
@@ -73,12 +102,10 @@ const getUsuarioEmpresas = async (req, res) => {
             });
         }
 
+        const empresaIds = normalizeEmpresaIds(usuarioEmpresas.empresa_ids);
         const empresaNames = await Promise.all(
-            usuarioEmpresas.empresa_ids.map(async (empresaId) => {
-                const empresa = await empresaModels.findOne({
-                    where: { emp_id: empresaId }
-                });
-                return empresa ? empresa.emp_nombre : `ID: ${empresaId}`;
+            empresaIds.map(async (empresaId) => {
+                return await resolveEmpresaNombre(empresaId);
             })
         );
         
@@ -87,7 +114,7 @@ const getUsuarioEmpresas = async (req, res) => {
                 id: usuarioEmpresas.id,
                 usu_documento: usuarioEmpresas.usu_documento,
                 usu_nombre: usuarioEmpresas.usuario ? usuarioEmpresas.usuario.usu_nombre : 'Usuario no encontrado',
-                empresa_ids: usuarioEmpresas.empresa_ids,
+                empresa_ids: empresaIds,
                 empresa_names: empresaNames,
                 created_at: usuarioEmpresas.created_at,
                 updated_at: usuarioEmpresas.updated_at
@@ -107,21 +134,28 @@ const getUsuarioEmpresas = async (req, res) => {
 const createUsuarioEmpresas = async (req, res) => {
     try {
         const { usu_documento, empresa_ids } = req.body;
+        const empresaIds = normalizeEmpresaIds(empresa_ids);
         
         const usuarioExistente = await UsuarioEmpresas.findOne({
             where: { usu_documento }
         });
         
         if (usuarioExistente) {
-            return res.status(409).send({
-                error: "USUARIO_EMPRESAS_YA_EXISTE",
-                message: "El usuario ya tiene empresas asignadas"
+            await UsuarioEmpresas.update(
+                { empresa_ids: empresaIds },
+                { where: { usu_documento } }
+            );
+
+            const updatedData = await UsuarioEmpresas.findOne({ where: { usu_documento } });
+            return res.status(200).send({
+                data: updatedData,
+                message: "Usuario empresas actualizado correctamente"
             });
         }
 
         const data = await UsuarioEmpresas.create({
             usu_documento,
-            empresa_ids: empresa_ids || []
+            empresa_ids: empresaIds
         });
         
         res.status(201).send({
@@ -215,9 +249,13 @@ const getEmpresasAsignadas = async (req, res) => {
                 message: "Usuario sin empresas asignadas" 
             });
         }
-        
+
+        const empresaIds = normalizeEmpresaIds(usuarioEmpresas.empresa_ids).map((id) =>
+            String(id || ""),
+        );
+
         res.status(200).send({
-            data: usuarioEmpresas.empresa_ids || [],
+            data: empresaIds,
             message: "Empresas asignadas obtenidas correctamente"
         });
         

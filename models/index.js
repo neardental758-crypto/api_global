@@ -630,8 +630,8 @@ if (MOTORDB === 'mysql') {
     UsuarioPermiso.belongsTo(Permiso, { foreignKey: 'up_permiso_id', targetKey: 'per_id' });
     Permiso.hasMany(UsuarioPermiso, { foreignKey: 'up_permiso_id', sourceKey: 'per_id' });
 
-    TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento' });
-    Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento' });
+    TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento', as: 'user' });
+    Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento', as: 'nfcCards' });
 
 
     module.exports = models
