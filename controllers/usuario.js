@@ -520,6 +520,12 @@ const patchItem = async (req, res) => {
             }
         }
 
+        // Catch the profile photo update securely via Redux userSaga
+        if (updates && Object.prototype.hasOwnProperty.call(updates, "usu_img")) {
+            console.log("PATCH REQUEST INCLUDES PROFILE PHOTO update:", updates.usu_img);
+            updates.usu_updated_at = new Date();
+        }
+
         const [affectedRows] = await usuarioModels.update(updates, {
             where: { usu_documento }
         });
@@ -1015,6 +1021,47 @@ const loginApp = async (req, res) => {
     }
 };
 
+const updatePhoto = async (req, res) => {
+    const usu_documento = req.params.usu_documento;
+    const { usu_img } = req.body;
+
+    try {
+        if (!usu_img) {
+            return res.status(400).json({
+                success: false,
+                error: "USU_IMG_REQUIRED",
+                message: "La URL de la imagen (usu_img) es requerida."
+            });
+        }
+
+        const [affectedRows] = await usuarioModels.update(
+            { usu_img },
+            { where: { usu_documento } }
+        );
+
+        if (affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado o la foto ya era la misma.',
+                affectedRows
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Foto de perfil actualizada exitosamente en MySQL.',
+            affectedRows,
+            usu_img
+        });
+    } catch (error) {
+        console.error('updatePhoto ENDPOINT - Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al actualizar la foto de perfil.'
+        });
+    }
+};
+
 module.exports = {
-    getItems, getItem, createItem, updateItem, deleteItem, login, loginApp, patchItem, patchOrganization, generateTokenForOrganization, getItem_cortezza, getItems_cortezza, createUserComplete, getOperarios, checkUserExists, correo__password_ride, correo__password_meb, getUsersByOrganization
+    getItems, getItem, createItem, updateItem, deleteItem, login, loginApp, patchItem, patchOrganization, generateTokenForOrganization, getItem_cortezza, getItems_cortezza, createUserComplete, getOperarios, checkUserExists, correo__password_ride, correo__password_meb, getUsersByOrganization, updatePhoto
 }

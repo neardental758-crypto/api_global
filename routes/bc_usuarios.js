@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/session');
 const { validatorCreateUser, validatorGetUser, validatorLogin, validatorUpdateUser, validatorPatch, validatorOrganizationId } = require('../validators/usersValidators');
 const { getItems, getItem, changeNames, createItem, deleteItem,
-    login, loginApp, correo__password_ride, correo__password_meb, generateTokenForOrganization, updateItem, patchItem, patchOrganization, getItems_cortezza, getItem_cortezza, createUserComplete, getOperarios, checkUserExists, getUsersByOrganization } = require('../controllers/usuario');
+    login, loginApp, correo__password_ride, correo__password_meb, generateTokenForOrganization, updateItem, patchItem, patchOrganization, getItems_cortezza, getItem_cortezza, createUserComplete, getOperarios, checkUserExists, getUsersByOrganization, updatePhoto } = require('../controllers/usuario');
 /**
  * las rutas de las diferentes peticiones para esta colección
  */
@@ -40,7 +40,9 @@ router.patch("/empresa/:usu_documento", authMiddleware(["all"]), validatorPatch,
 
 router.patch("/:usu_documento", authMiddleware(["all"]), validatorPatch, patchItem);  ///error revisar
 
-router.post('/create_user_complete',authMiddleware(["all"]), createUserComplete);
+router.patch("/updatePhoto/:usu_documento", authMiddleware(["all"]), updatePhoto);
+
+router.post('/create_user_complete', authMiddleware(["all"]), createUserComplete);
 
 router.get('/operarios', authMiddleware(["all"]), getOperarios);
 
