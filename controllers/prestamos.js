@@ -5,6 +5,7 @@ const Estacion = require('../models/mysql/estacion');
 const Empresa = require('../models/mysql/empresa');
 const Bicicleta = require('../models/mysql/bicicletas');
 const Bicicletero = require('../models/mysql/bicicleteros');
+const Candado = require('../models/mysql/candados');
 const { httpError } = require('../utils/handleError');
 const { Op, literal } = require('sequelize');
 const Comentarios = require('../models/mysql/comentarios');
@@ -1315,22 +1316,6 @@ const finalizeLoan5g = async (req, res) => {
       });
     }
 
-    const candado = await Candado.findOne({
-      where: {
-        can_bicicleta: prestamo.pre_bicicleta
-      },
-      transaction
-    });
-
-    if (candado) {
-      await Candado.update({
-        can_estado_candado: 'closed'
-      }, {
-        where: { can_id: candado.can_id },
-        transaction
-      });
-    }
-
     const ahora = new Date();
     const fechaOriginal = new Date(ahora.getTime() - (5 * 60 * 60 * 1000));
     const fechaCompleta = fechaOriginal.toISOString();
@@ -1346,13 +1331,13 @@ const finalizeLoan5g = async (req, res) => {
           [Op.ne]: pre_id
         }
       },
-      order: [['pre_created_at', 'DESC']],
+      order: [['pre_retiro_fecha', 'DESC']],
       transaction
     });
 
     const prestamoMasReciente = [prestamo, ...otrosPrestamosActivos].reduce((latest, current) => {
       if (!latest) return current;
-      return new Date(current.pre_created_at) > new Date(latest.pre_created_at) ? current : latest;
+      return new Date(current.pre_retiro_fecha) > new Date(latest.pre_retiro_fecha) ? current : latest;
     });
 
     for (const otroPrestamo of otrosPrestamosActivos) {

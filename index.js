@@ -10,10 +10,13 @@ const { dbConnectMysql } = require('./config/mysql');
 const app = express();
 const cron = require('./cron');
 const { startSessionCleanup, startAgendamientosCleanup } = require('./utils/cronJobs');
+const path = require('path');
 
 app.use(cors());
 app.use(express.json())
 app.use(express.static("storage"))
+// Expose the static resized images folder for React Native
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 const port = process.env.PORT || 3002;
 cron;

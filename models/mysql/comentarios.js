@@ -27,6 +27,9 @@ const Comentarios = sequelize.define(
         com_calificacion: {
             type: DataTypes.STRING,
         },
+        com_imagen: {
+            type: DataTypes.STRING,
+        },
     }
 );
 
