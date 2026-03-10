@@ -147,7 +147,7 @@ const getItinerario = async (req, res) => {
                 },
                 include: [{
                     model: Usuario,
-                    attributes: ['usu_documento', 'usu_nombre', 'usu_img', 'usu_calificacion'],
+                    attributes: ['usu_documento', 'usu_nombre', 'usu_img'],
                 }, {
                     model: Vehiculo,
                 }]
@@ -187,8 +187,8 @@ const getItinerario = async (req, res) => {
             },
         });
     } catch (e) {
-        // Manejo de errores
-        httpError(res, `ERROR_GET_COMPARTIDOCONDUCTOR ${e}`);
+        console.error('ERROR getItinerario:', e.message || e);
+        res.status(500).json({ error: `ERROR_GET_COMPARTIDOCONDUCTOR: ${e.message || String(e)}` });
     }
 };
 
@@ -229,7 +229,7 @@ const getHistorial = async (req, res) => {
                 attributes: ['lSalida', 'llegada', 'fecha', 'estado', 'coorSalida', 'coorDestino', 'precio', 'distanciaGoogle'],
                 include: [{
                     model: Usuario,
-                    attributes: ['usu_documento', 'usu_nombre', 'usu_img', 'usu_calificacion'],
+                    attributes: ['usu_documento', 'usu_nombre', 'usu_img'],
                 },
                 {
                     model: Vehiculo,
