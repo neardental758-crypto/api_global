@@ -163,6 +163,36 @@ const createItem = async (req, res) => {
             return res.status(400).send('ERROR: usu_documento es requerido');
         }
 
+        // --- NUEVAS VERIFICACIONES PREVENTIVAS ---
+        // 1. Verificar si el usuario ya existe
+        const usuarioExistente = await usuarioModels.findByPk(usu_documento, { transaction });
+        if (usuarioExistente) {
+            await transaction.rollback();
+            return res.status(409).send({
+                error: "USUARIO_YA_EXISTE",
+                message: "El usuario con este documento ya existe"
+            });
+        }
+
+        // 2. Verificar si el correo ya existe
+        if (usu_email) {
+            const rowsEmail = await sequelize.query(
+                "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
+                {
+                    replacements: [String(usu_email).trim()],
+                    type: QueryTypes.SELECT,
+                    transaction: transaction,
+                },
+            );
+            if (rowsEmail && rowsEmail.length > 0) {
+                await transaction.rollback();
+                return res.status(409).send({
+                    error: "EMAIL_YA_EXISTE",
+                    message: "El correo ya está registrado en el sistema"
+                });
+            }
+        }
+
         // 1. Encriptar contraseña
         let passwordHash = usu_password_raw;
         if (usu_password_raw) {

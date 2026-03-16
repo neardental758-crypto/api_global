@@ -2,8 +2,19 @@ const { check } = require('express-validator');
 const validateResults = require('../utils/handleValidator');
 
 const validatorCreateUser = [
-    check("usu_documento").exists().notEmpty(),
-    (req, res, next) =>{
+    (req, res, next) => {
+        const b = req.body || {};
+        if (b.idNumber && !b.usu_documento) b.usu_documento = b.idNumber;
+        if (b.name && !b.usu_nombre) b.usu_nombre = b.name;
+        if (b.email && !b.usu_email) b.usu_email = b.email;
+        if (b.password && !b.usu_password) b.usu_password = b.password;
+        next();
+    },
+    check("usu_documento").exists().notEmpty().withMessage("Documento es requerido"),
+    check("usu_nombre").exists().notEmpty().withMessage("Nombre es requerido"),
+    check("usu_email").exists().notEmpty().isEmail().withMessage("Email válido es requerido"),
+    check("usu_password").exists().notEmpty().withMessage("Contraseña es requerida"),
+    (req, res, next) => {
         return validateResults(req, res, next);
     }
 ];
