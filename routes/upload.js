@@ -31,6 +31,9 @@ router.post('/', upload.single('image'), async (req, res) => {
         if (type === 'user') {
             subDir = 'users';
             fileNamePrefix = 'user-profile';
+        } else if (type === 'vehiculo' || type === 'vpusuario' || type === 'vp_vehiculos_usuario') {
+            subDir = 'vehiculos';
+            fileNamePrefix = 'vehiculo';
         }
 
         const targetDir = path.join(rootUploadsDir, subDir);
