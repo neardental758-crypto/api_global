@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json())
 app.use(express.static("storage"))
 
-const port = process.env.PORT || 3002;
+const port = process.env.API_PORT || process.env.PORT || 3002;
 cron;
 startSessionCleanup();
 startAgendamientosCleanup();

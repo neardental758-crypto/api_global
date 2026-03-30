@@ -619,6 +619,17 @@ const getItemsForReportsByOrganization = async (req, res) => {
     if (startDate && startDate.includes('?')) startDate = startDate.split('?')[0];
     if (endDate && endDate.includes('?')) endDate = endDate.split('?')[0];
     if (stationName && stationName.includes('?')) stationName = stationName.split('?')[0];
+
+    const normalizeSqlDate = (value, isEnd) => {
+      if (!value) return null;
+      const cleaned = String(value).trim();
+      const hasTime = cleaned.includes(" ");
+      if (hasTime) return cleaned;
+      return isEnd ? `${cleaned} 23:59:59` : `${cleaned} 00:00:00`;
+    };
+
+    const startDateSql = normalizeSqlDate(startDate, false);
+    const endDateSql = normalizeSqlDate(endDate, true);
               
     if (!organizationId) {
       return res.status(400).json({
@@ -626,23 +637,26 @@ const getItemsForReportsByOrganization = async (req, res) => {
         message: 'Se requiere el ID de la organización'
       });
     }
+
+    const organization = await Empresa.findByPk(organizationId);
+    const organizationName = organization && organization.emp_nombre ? organization.emp_nombre : null;
         
  const whereCondition = literal(`
   (
-      (pre_retiro_fecha BETWEEN '${startDate}' AND '${endDate} 23:59:59')
+      (pre_retiro_fecha BETWEEN '${startDateSql}' AND '${endDateSql}')
       OR (
-          pre_retiro_fecha < '${startDate}'
+          pre_retiro_fecha < '${startDateSql}'
           AND pre_estado IN ('FINALIZADA', 'FINALIZADO')
-          AND pre_devolucion_fecha >= '${startDate}'
+          AND pre_devolucion_fecha >= '${startDateSql}'
       )
       OR (
           pre_estado IN ('ACTIVA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA', 'PRESTADA')
-          AND pre_retiro_fecha < '${endDate} 23:59:59'
+          AND pre_retiro_fecha < '${endDateSql}'
       )
   )
   AND (
       pre_dispositivo IN ('web_pp', 'web_pe')
-      OR 
+      OR
       (
           pre_dispositivo NOT IN ('web_pp', 'web_pe')
           AND (
@@ -676,12 +690,17 @@ const getItemsForReportsByOrganization = async (req, res) => {
           model: Usuario,
           attributes: ['usu_documento', 'usu_nombre', 'usu_empresa', 'usu_genero'],
           required: true,
-          where: { usu_prueba: 0 },
+          where: {
+            usu_empresa: {
+              [Op.in]: organizationName
+                ? [organizationId, organizationName]
+                : [organizationId],
+            },
+          },
           include: [{
             model: Empresa,
             attributes: ['emp_id', 'emp_nombre'],
-            required: true,
-            where: stationName ? {} : { emp_id: organizationId }
+            required: false
           }]
         },
         { 

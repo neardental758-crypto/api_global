@@ -453,8 +453,21 @@ const patchItem = async (req, res) => {
                 message: "Update BICICLETA"
             });
         } else {
-            res.json({
-                message: "Update BICICLETA failed: No rows affected" 
+            const bicicletaExiste = await bicicletasModels.findOne({
+                where: { bic_id: bic_id }
+            });
+
+            if (!bicicletaExiste) {
+                res.status(404).json({
+                    message: "Update BICICLETA failed: Not found"
+                });
+                return;
+            }
+
+            res.status(200).json({
+                status: 200,
+                data: objetoACambiar,
+                message: "Update BICICLETA: No changes"
             });
         }
     } catch (error) {
