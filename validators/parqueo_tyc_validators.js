@@ -5,7 +5,7 @@ const validatorCreate = [
     check("usuario").exists().notEmpty(), 
     check("fecha_inscripcion").exists().notEmpty(),
     check("ultimo_vehiculo").exists().notEmpty(),
-    check("telefono").exists().notEmpty(),
+    check("telefono").optional(),
     check("email").exists().notEmpty(),
     check("saldo").exists().notEmpty(),
     (req, res, next) =>{

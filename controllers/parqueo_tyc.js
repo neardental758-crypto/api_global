@@ -43,7 +43,7 @@ const createItem = async (req, res) => {
         res.send({ message: "ok", data: data });
     } catch (e) {
         console.error("Error al crear el registro:", e);
-        httpError(res, "ERROR_CREATE_TYC_PARQUEO");
+        res.status(500).send({ error: e.message || "ERROR_CREATE_TYC_PARQUEO" });
     }
 };
 

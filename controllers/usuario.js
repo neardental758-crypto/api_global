@@ -163,6 +163,36 @@ const createItem = async (req, res) => {
             return res.status(400).send('ERROR: usu_documento es requerido');
         }
 
+        // --- NUEVAS VERIFICACIONES PREVENTIVAS ---
+        // 1. Verificar si el usuario ya existe
+        const usuarioExistente = await usuarioModels.findByPk(usu_documento, { transaction });
+        if (usuarioExistente) {
+            await transaction.rollback();
+            return res.status(409).send({
+                error: "USUARIO_YA_EXISTE",
+                message: "El usuario con este documento ya existe"
+            });
+        }
+
+        // 2. Verificar si el correo ya existe
+        if (usu_email) {
+            const rowsEmail = await sequelize.query(
+                "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
+                {
+                    replacements: [String(usu_email).trim()],
+                    type: QueryTypes.SELECT,
+                    transaction: transaction,
+                },
+            );
+            if (rowsEmail && rowsEmail.length > 0) {
+                await transaction.rollback();
+                return res.status(409).send({
+                    error: "EMAIL_YA_EXISTE",
+                    message: "El correo ya está registrado en el sistema"
+                });
+            }
+        }
+
         // 1. Encriptar contraseña
         let passwordHash = usu_password_raw;
         if (usu_password_raw) {
@@ -278,25 +308,25 @@ const createUserComplete = async (req, res) => {
             });
         }
 
-    // 3.1 Verificar si el correo ya existe
-    const emailToCheck = body && body.email ? String(body.email).trim() : "";
-    if (emailToCheck) {
-      const rowsEmail = await sequelize.query(
-        "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
-        {
-          replacements: [emailToCheck],
-          type: QueryTypes.SELECT,
-          transaction: transaction,
-        },
-      );
-      if (rowsEmail && rowsEmail[0] && rowsEmail[0].usu_documento) {
-        await transaction.rollback();
-        return res.status(409).send({
-          error: "EMAIL_YA_EXISTE",
-          message: "El correo ya está registrado en el sistema",
-        });
-      }
-    }
+        // 3.1 Verificar si el correo ya existe
+        const emailToCheck = body && body.email ? String(body.email).trim() : "";
+        if (emailToCheck) {
+            const rowsEmail = await sequelize.query(
+                "SELECT usu_documento FROM bc_usuarios WHERE usu_email = ? LIMIT 1",
+                {
+                    replacements: [emailToCheck],
+                    type: QueryTypes.SELECT,
+                    transaction: transaction,
+                },
+            );
+            if (rowsEmail && rowsEmail[0] && rowsEmail[0].usu_documento) {
+                await transaction.rollback();
+                return res.status(409).send({
+                    error: "EMAIL_YA_EXISTE",
+                    message: "El correo ya está registrado en el sistema",
+                });
+            }
+        }
 
         // 4. Crear primero el registro extendido (para satisfacer la clave foránea)
         await registroExtModels.create({
@@ -316,40 +346,40 @@ const createUserComplete = async (req, res) => {
         }, { transaction });
 
         // 5. Crear el usuario con el nombre de empresa correcto
-    const nombre = body && body.nombre ? String(body.nombre) : "";
-    const apellido = body && body.apellido ? String(body.apellido) : "";
-    const fullName = (nombre + " " + apellido).trim();
-    const email = body && body.email ? String(body.email) : "";
-    const birthdate = body && body.birthdate ? String(body.birthdate) : "";
-    const genero = body && body.genero ? String(body.genero) : "";
-    const usuImg = body && body.usu_img ? String(body.usu_img) : "";
-    const usuPrueba = body && typeof body.usu_prueba !== "undefined" ? body.usu_prueba : 0;
-    const habilitado = body && typeof body.usu_habilitado !== "undefined"
-      ? Number(body.usu_habilitado) === 1
-        ? 1
-        : 0
-      : body && body.accountState
-        ? String(body.accountState) === "active"
-          ? 1
-          : 0
-        : 1;
-    const cargo = body && body.position ? String(body.position) : "";
-    let cargoDireccionValida = null;
-    try {
-      cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
-    } catch (e) {
-      await transaction.rollback();
-      return res.status(400).send({
-        error: "USU_DIR_TRABAJO_INVALID",
-        message:
-          "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
-      });
-    }
+        const nombre = body && body.nombre ? String(body.nombre) : "";
+        const apellido = body && body.apellido ? String(body.apellido) : "";
+        const fullName = (nombre + " " + apellido).trim();
+        const email = body && body.email ? String(body.email) : "";
+        const birthdate = body && body.birthdate ? String(body.birthdate) : "";
+        const genero = body && body.genero ? String(body.genero) : "";
+        const usuImg = body && body.usu_img ? String(body.usu_img) : "";
+        const usuPrueba = body && typeof body.usu_prueba !== "undefined" ? body.usu_prueba : 0;
+        const habilitado = body && typeof body.usu_habilitado !== "undefined"
+            ? Number(body.usu_habilitado) === 1
+                ? 1
+                : 0
+            : body && body.accountState
+                ? String(body.accountState) === "active"
+                    ? 1
+                    : 0
+                : 1;
+        const cargo = body && body.position ? String(body.position) : "";
+        let cargoDireccionValida = null;
+        try {
+            cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
+        } catch (e) {
+            await transaction.rollback();
+            return res.status(400).send({
+                error: "USU_DIR_TRABAJO_INVALID",
+                message:
+                    "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
+            });
+        }
 
         const usuarioCreado = await usuarioModels.create({
             usu_documento: body.idNumber,
             usu_nombre: fullName || body.nombre,
-      usu_email: email,
+            usu_email: email,
             usu_empresa: empresa.emp_nombre, // Nombre exacto de la empresa
             usu_ciudad: "Dashboard",
             usu_habilitado: habilitado,
@@ -357,8 +387,8 @@ const createUserComplete = async (req, res) => {
             usu_viajes: 0,
             usu_edad: 0,
             usu_genero: genero || 'No especificado',
-      usu_fecha_nacimiento: birthdate,
-      usu_img: usuImg,
+            usu_fecha_nacimiento: birthdate,
+            usu_img: usuImg,
             usu_dir_trabajo: cargoDireccionValida,
             usu_dir_casa: 'No especificado',
             usu_recorrido: '0',
@@ -369,24 +399,24 @@ const createUserComplete = async (req, res) => {
             usu_modulo_carpooling: false
         }, { transaction });
 
-    // 5.1 Crear relación usuario-rol si viene rolId
-    const rolId = body && (body.rolId || body.ur_rol_id) ? (body.rolId || body.ur_rol_id) : null;
-    if (rolId) {
-      const urId = "ur-" + String(body.idNumber) + "-" + String(rolId);
-      const existingUr = await UsuarioRol.findByPk(urId, { transaction });
-      if (!existingUr) {
-        await UsuarioRol.create(
-          {
-            ur_id: urId,
-            ur_usuario_id: String(body.idNumber),
-            ur_rol_id: String(rolId),
-            ur_created_at: new Date(),
-            ur_updated_at: new Date(),
-          },
-          { transaction },
-        );
-      }
-    }
+        // 5.1 Crear relación usuario-rol si viene rolId
+        const rolId = body && (body.rolId || body.ur_rol_id) ? (body.rolId || body.ur_rol_id) : null;
+        if (rolId) {
+            const urId = "ur-" + String(body.idNumber) + "-" + String(rolId);
+            const existingUr = await UsuarioRol.findByPk(urId, { transaction });
+            if (!existingUr) {
+                await UsuarioRol.create(
+                    {
+                        ur_id: urId,
+                        ur_usuario_id: String(body.idNumber),
+                        ur_rol_id: String(rolId),
+                        ur_created_at: new Date(),
+                        ur_updated_at: new Date(),
+                    },
+                    { transaction },
+                );
+            }
+        }
 
         // 6. Confirmar la transacción
         await transaction.commit();
@@ -518,6 +548,12 @@ const patchItem = async (req, res) => {
                         "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
                 });
             }
+        }
+
+        // Catch the profile photo update securely via Redux userSaga
+        if (updates && Object.prototype.hasOwnProperty.call(updates, "usu_img")) {
+            console.log("PATCH REQUEST INCLUDES PROFILE PHOTO update:", updates.usu_img);
+            updates.usu_updated_at = new Date();
         }
 
         const [affectedRows] = await usuarioModels.update(updates, {
@@ -1023,6 +1059,47 @@ const loginApp = async (req, res) => {
     }
 };
 
+const updatePhoto = async (req, res) => {
+    const usu_documento = req.params.usu_documento;
+    const { usu_img } = req.body;
+
+    try {
+        if (!usu_img) {
+            return res.status(400).json({
+                success: false,
+                error: "USU_IMG_REQUIRED",
+                message: "La URL de la imagen (usu_img) es requerida."
+            });
+        }
+
+        const [affectedRows] = await usuarioModels.update(
+            { usu_img },
+            { where: { usu_documento } }
+        );
+
+        if (affectedRows === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Usuario no encontrado o la foto ya era la misma.',
+                affectedRows
+            });
+        }
+
+        return res.status(200).json({
+            success: true,
+            message: 'Foto de perfil actualizada exitosamente en MySQL.',
+            affectedRows,
+            usu_img
+        });
+    } catch (error) {
+        console.error('updatePhoto ENDPOINT - Error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error al actualizar la foto de perfil.'
+        });
+    }
+};
+
 module.exports = {
-    getItems, getItem, createItem, updateItem, deleteItem, login, loginApp, patchItem, patchOrganization, generateTokenForOrganization, getItem_cortezza, getItems_cortezza, createUserComplete, getOperarios, checkUserExists, correo__password_ride, correo__password_meb, getUsersByOrganization
+    getItems, getItem, createItem, updateItem, deleteItem, login, loginApp, patchItem, patchOrganization, generateTokenForOrganization, getItem_cortezza, getItems_cortezza, createUserComplete, getOperarios, checkUserExists, correo__password_ride, correo__password_meb, getUsersByOrganization, updatePhoto
 }

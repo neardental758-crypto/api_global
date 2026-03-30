@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { validatorCreateEstacion, validatorGetUser, validatorGetNombre, validatorGetEmpresa, validatorUpdateEstacion } = require('../validators/estacionValidators');
 const { getItems, createItem, getItem, getItemNombre, getItemEmpresa, getItem_empresa, updateEstacionData,
-         getItem_cortezza, getItems_cortezza} = require('../controllers/estacion');
+    getItem_cortezza, getItems_cortezza } = require('../controllers/estacion');
 const authMiddleware = require('../middleware/session');
 
-router.get("/", authMiddleware(["all"]), getItems);
+// router.get("/", authMiddleware(["all"]), getItems);
+router.get("/", getItems);
 
 router.get("/id/:est_id", authMiddleware(["all"]), validatorGetUser, getItem);
 
