@@ -509,19 +509,702 @@ const getMantenimientosPorOperario = async (req, res) => {
     }
 };
 
-const getComponentesConCategorias = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const crearMantenimientosMasivo = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const actualizarHistorialComponente = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const crearHistorialComponente = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getEstadisticasOperarios = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getRendimientoOperarios = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getEstadisticasOperariosByEmpresa = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getEstadisticasOperariosByEstacion = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getComponentesPorBicicleta = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const trasladoMasivoMantenimientos = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
-const getHistorialMantenimiento = async (req, res) => res.status(501).send({ error: 'NOT_IMPLEMENTED' });
+const getComponentesConCategorias = async (req, res) => {
+    try {
+      // Obtenemos todas las categorías
+      const categorias = await categoriaComponenteModels.findAll({
+        attributes: ['cat_id', 'cat_nombre', 'cat_descripcion']
+      });
+      
+      // Obtenemos todos los componentes con sus categorías
+      const componentes = await componenteModels.findAll({
+        attributes: ['comp_id', 'comp_nombre', 'categoria_id'],
+        include: [{
+          model: categoriaComponenteModels,
+          attributes: ['cat_id', 'cat_nombre']
+        }]
+      });
+      
+      // Devolvemos ambos datos
+      res.send({ 
+        categorias: categorias,
+        componentes: componentes
+      });
+    } catch (error) {
+      console.error(error);
+      handleHttpError(res, "ERROR_GET_COMPONENTES_CATEGORIAS");
+    }
+  };
+
+const crearMantenimientosMasivo = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+      const { mantenimientos } = req.body;
+      
+      const resultados = [];
+      
+      for (const mantenimientoItem of mantenimientos) {
+        const { diagnostico_componentes, ...mantenimientoData } = mantenimientoItem;
+        
+        if (mantenimientoData.estacion_id !== undefined && mantenimientoData.estacion_id !== null) {
+          mantenimientoData.estacion_id = parseInt(mantenimientoData.estacion_id, 10);
+        }
+        
+        if (!mantenimientoData.prioridad) {
+            mantenimientoData.prioridad = 'media';
+        }
+        
+        const mantenimientoCreado = await mantenimientoModels.create(mantenimientoData, { transaction });
+        
+        if (diagnostico_componentes && diagnostico_componentes.length > 0) {
+          const historialRegistros = [];
+          
+          for (const componente of diagnostico_componentes) {
+            const historialItem = {
+              mantenimiento_id: mantenimientoCreado.id,
+              componente_id: componente.componente_id,
+              estado_anterior: 'ok',
+              estado_nuevo: componente.estado,
+              accion_realizada: 'diagnóstico',
+              comentario: componente.comentario || '',
+              operario_id: mantenimientoData.operario_id
+            };
+            historialRegistros.push(historialItem);
+            
+            await estadoComponenteModels.upsert({
+              bicicleta_id: mantenimientoData.bicicleta_id,
+              componente_id: componente.componente_id,
+              estado: componente.estado
+            }, { transaction });
+          }
+          
+          if (historialRegistros.length > 0) {
+            await historialMantenimientoModels.bulkCreate(historialRegistros, { transaction });
+          }
+        }
+        
+        // Finalizar si es necesario
+        if (mantenimientoData.estado === 'finalizado') {
+          await mantenimientoCreado.update({ 
+            fecha_finalizacion: new Date() 
+          }, { transaction });
+        }
+        
+        resultados.push(mantenimientoCreado.id);
+      }
+      
+      await transaction.commit();
+      
+      res.status(201).send({ 
+        message: `${resultados.length} mantenimientos creados correctamente`,
+        ids: resultados 
+      });
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Error en creación masiva:", error);
+      handleHttpError(res, "ERROR_CREAR_MANTENIMIENTOS_MASIVO");
+    }
+};
+const actualizarHistorialComponente = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const { historial_id } = req.params;
+        const { estado_nuevo, accion_realizada, comentario } = req.body;
+        
+        const historial = await historialMantenimientoModels.findByPk(historial_id, {
+            include: [{
+                model: mantenimientoModels,
+                attributes: ['id', 'bicicleta_id']
+            }]
+        });
+        
+        if (!historial) {
+            await transaction.rollback();
+            return res.status(404).send({ error: "HISTORIAL_NO_ENCONTRADO" });
+        }
+
+        if (estado_nuevo === 'ok') {
+            const bicicletaId = historial.bc_mantenimiento.bicicleta_id;
+            const componenteId = historial.componente_id;
+            
+            await historial.destroy({ transaction });
+            
+            await estadoComponenteModels.destroy({
+                where: {
+                    bicicleta_id: bicicletaId,
+                    componente_id: componenteId
+                },
+                transaction
+            });
+            
+            await transaction.commit();
+            
+            return res.send({ 
+                message: "Registro eliminado",
+                deleted: true,
+                historial_id: historial_id
+            });
+        }
+        
+        await historial.update({
+            estado_nuevo,
+            accion_realizada,
+            comentario: comentario || null,
+            fecha_revision: new Date()
+        }, { transaction });
+        
+        await estadoComponenteModels.upsert({
+            bicicleta_id: historial.bc_mantenimiento.bicicleta_id,
+            componente_id: historial.componente_id,
+            estado: estado_nuevo
+        }, { transaction });
+        
+        await transaction.commit();
+        
+        const historialActualizado = await historialMantenimientoModels.findByPk(historial_id, {
+            include: [{
+                model: componenteModels,
+                attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+            }]
+        });
+        
+        res.send({ data: historialActualizado });
+    } catch (error) {
+        await transaction.rollback();
+        console.error("Error al actualizar historial:", error);
+        res.status(500).send({ error: "ERROR_ACTUALIZAR_HISTORIAL" });
+    }
+};
+
+const crearHistorialComponente = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+      const body = matchedData(req);
+      
+      // Crear un nuevo registro de historial
+      const nuevoHistorial = await historialMantenimientoModels.create({
+        mantenimiento_id: body.mantenimiento_id,
+        componente_id: body.componente_id,
+        estado_anterior: body.estado_anterior,
+        estado_nuevo: body.estado_nuevo,
+        accion_realizada: body.accion_realizada,
+        comentario: body.comentario,
+        operario_id: body.operario_id,
+        fecha_registro: new Date()
+      }, { transaction });
+      
+      // Actualizar el estado del componente en la tabla de estados
+      await estadoComponenteModels.upsert({
+        bicicleta_id: body.bicicleta_id || (await mantenimientoModels.findByPk(body.mantenimiento_id)).bicicleta_id,
+        componente_id: body.componente_id,
+        estado: body.estado_nuevo
+      }, { transaction });
+      
+      await transaction.commit();
+      
+      // Obtener el historial completo con las relaciones
+      const historialCompleto = await historialMantenimientoModels.findByPk(nuevoHistorial.id, {
+        include: [
+          {
+            model: componenteModels,
+            attributes: ['comp_id', 'comp_nombre', 'categoria_id'],
+            include: [
+              {
+                model: categoriaComponenteModels,
+                attributes: ['cat_id', 'cat_nombre', 'cat_descripcion']
+              }
+            ]
+          }
+        ]
+      });
+      
+      res.status(201).send({ data: historialCompleto });
+    } catch (error) {
+      await transaction.rollback();
+      console.error("Error al crear historial de componente:", error);
+      handleHttpError(res, "ERROR_CREAR_HISTORIAL_COMPONENTE");
+    }
+  };
 
 
+const getEstadisticasOperarios = async (req, res) => {
+  try {
+    let params = req.query;
+    
+    if (req.query.filter) {
+      try {
+        params = JSON.parse(req.query.filter);
+      } catch (e) {
+        console.error("Error al parsear filtros:", e);
+      }
+    }
+    
+    const { empresa_id, estacion_id, fecha_inicio, fecha_fin, operario_id } = params;
+    
+    // Definir la zona horaria local (Colombia es UTC-5)
+    const zonaHoraria = '-05:00';
+    
+    let whereConditions = '';
+    const replacements = {};
+    
+    if (empresa_id) {
+      whereConditions += ' AND m.empresa_id = :empresa_id';
+      replacements.empresa_id = empresa_id;
+    }
+    
+    if (estacion_id) {
+      whereConditions += ' AND m.estacion_id = :estacion_id';
+      replacements.estacion_id = estacion_id;
+    }
+    
+    // SOLUCIÓN FINAL PARA EL RANGO DE FECHAS
+    if (fecha_inicio && fecha_fin) {
+      // Si hay ambas fechas, usar el rango completo
+      whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) >= :fecha_inicio`;
+      whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) <= :fecha_fin`;
+      replacements.fecha_inicio = fecha_inicio;
+      replacements.fecha_fin = fecha_fin;
+    } else if (fecha_inicio) {
+      // Si solo hay fecha de inicio, traer desde esa fecha hasta hoy
+      const fechaActual = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+      whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) >= :fecha_inicio`;
+      replacements.fecha_inicio = fecha_inicio;
+    }
+    
+    if (operario_id) {
+      whereConditions += ' AND m.operario_id = :operario_id';
+      replacements.operario_id = operario_id;
+    }
+    
+    // Consulta principal con agrupación por operario y ajuste de zona horaria
+    const query = `
+      SELECT 
+        u.usu_documento AS operario_id,
+        u.usu_nombre AS nombre_operario,
+        COUNT(m.id) AS total_mantenimientos,
+        SUM(CASE WHEN m.estado = 'finalizado' THEN 1 ELSE 0 END) AS mantenimientos_finalizados,
+        SUM(CASE WHEN m.estado = 'en_proceso' THEN 1 ELSE 0 END) AS mantenimientos_en_proceso,
+        SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
+        AVG(CASE WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+          THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
+          ELSE NULL END) AS tiempo_promedio_horas,
+        COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
+        GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids,
+        GROUP_CONCAT(DISTINCT m.empresa_id) AS empresas_ids
+      FROM bc_mantenimientos m
+      JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+      WHERE 1=1 ${whereConditions}
+      GROUP BY u.usu_documento, u.usu_nombre
+      HAVING total_mantenimientos > 0
+    `;
+    
+    
+    const estadisticas = await sequelize.query(query, { 
+      replacements,
+      type: sequelize.QueryTypes.SELECT 
+    });
+    
+    
+    res.send({ data: estadisticas });
+  } catch (error) {
+    console.error("ERROR:", error);
+    res.status(500).send({ error: "ERROR_GET_ESTADISTICAS_OPERARIOS" });
+  }
+};
+
+const getRendimientoOperarios = async (req, res) => {
+    try {
+        // Obtener parámetros de query o body según el método HTTP
+        const params = req.method === 'POST' ? req.body : req.query;
+        
+        const { fecha_inicio, fecha_fin, empresa_id, estacion_id } = params;
+        
+        if (!fecha_inicio || !fecha_fin) {
+            return handleHttpError(res, "FECHAS_REQUERIDAS", 400);
+        }
+        
+        let whereConditions = '';
+        const replacements = {
+            fecha_inicio: `${fecha_inicio} 00:00:00`, 
+            fecha_fin: `${fecha_fin} 23:59:59`
+        };
+        
+        if (empresa_id) {
+            whereConditions += ' AND m.empresa_id = :empresa_id';
+            replacements.empresa_id = empresa_id;
+        }
+        
+        if (estacion_id) {
+            whereConditions += ' AND m.estacion_id = :estacion_id';
+            replacements.estacion_id = estacion_id;
+        }
+        
+        const query = `
+            SELECT 
+                u.usu_documento AS operario_id,
+                u.usu_nombre AS nombre_operario,
+                COUNT(m.id) AS total_mantenimientos,
+                SUM(CASE WHEN m.estado = 'finalizado' THEN 1 ELSE 0 END) AS mantenimientos_finalizados,
+                SUM(CASE WHEN m.estado = 'en_proceso' THEN 1 ELSE 0 END) AS mantenimientos_en_proceso,
+                SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
+                COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
+                GROUP_CONCAT(DISTINCT m.empresa_id) AS empresas_ids,
+                AVG(CASE 
+                    WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+                    THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
+                    ELSE NULL 
+                END) AS tiempo_promedio_horas,
+                (
+                    SELECT COUNT(h.id) 
+                    FROM bc_historial_mantenimientos h
+                    JOIN bc_mantenimientos m2 ON h.mantenimiento_id = m2.id
+                    WHERE h.operario_id = u.usu_documento
+                    AND h.fecha_registro BETWEEN :fecha_inicio AND :fecha_fin
+                    ${empresa_id ? 'AND m2.empresa_id = :empresa_id' : ''}
+                    ${estacion_id ? 'AND m2.estacion_id = :estacion_id' : ''}
+                ) AS componentes_reparados,
+                GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids
+            FROM bc_mantenimientos m
+            JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+            WHERE m.fecha_creacion BETWEEN :fecha_inicio AND :fecha_fin ${whereConditions}
+            GROUP BY u.usu_documento, u.usu_nombre
+            HAVING total_mantenimientos > 0
+            ORDER BY mantenimientos_finalizados DESC
+        `;
+        
+        const rendimiento = await sequelize.query(query, { 
+            replacements: replacements,
+            type: sequelize.QueryTypes.SELECT 
+        });
+        
+        const rendimientoConFormato = rendimiento.map(op => {
+            op.estaciones_ids = op.estaciones_ids ? op.estaciones_ids.split(',') : [];
+            op.empresas_ids = op.empresas_ids ? op.empresas_ids.split(',') : [];
+            
+            // Asignar empresa_id si fue filtrado
+            if (empresa_id) {
+                op.empresa_id = empresa_id;
+            } else if (op.empresas_ids && op.empresas_ids.length === 1) {
+                op.empresa_id = op.empresas_ids[0];
+            }
+            
+            // Calcular eficiencia
+            op.eficiencia = op.total_mantenimientos > 0 
+                ? ((op.mantenimientos_finalizados / op.total_mantenimientos) * 100).toFixed(2) 
+                : "0.00";
+                
+            return op;
+        });
+        
+        res.send({ 
+            data: {
+                periodo: { inicio: fecha_inicio, fin: fecha_fin },
+                rendimiento: rendimientoConFormato
+            } 
+        });
+    } catch (error) {
+        console.error("Error al obtener rendimiento:", error);
+        handleHttpError(res, "ERROR_GET_RENDIMIENTO_OPERARIOS");
+    }
+};
+
+const getEstadisticasOperariosByEmpresa = async (req, res) => {
+  try {
+    const { empresaId } = req.params;
+    const { fecha_inicio, fecha_fin, operario_id } = req.query;
+    
+    if (!empresaId) {
+      return handleHttpError(res, "EMPRESA_ID_REQUIRED", 400);
+    }
+    
+    let whereConditions = ' AND m.empresa_id = :empresaId';
+    const replacements = { empresaId };
+    
+    if (fecha_inicio) {
+      whereConditions += ' AND DATE(m.fecha_creacion) >= DATE(:fecha_inicio)';
+      replacements.fecha_inicio = fecha_inicio;
+    }
+
+    if (fecha_fin) {
+      whereConditions += ' AND DATE(m.fecha_creacion) <= DATE(:fecha_fin)';
+      replacements.fecha_fin = fecha_fin;
+    }
+    
+    if (operario_id) {
+      whereConditions += ' AND m.operario_id = :operario_id';
+      replacements.operario_id = operario_id;
+    }
+    
+    const query = `
+      SELECT 
+        u.usu_documento AS operario_id,
+        u.usu_nombre AS nombre_operario,
+        '${empresaId}' AS empresa_id,
+        COUNT(m.id) AS total_mantenimientos,
+        SUM(CASE WHEN m.estado = 'finalizado' THEN 1 ELSE 0 END) AS mantenimientos_finalizados,
+        SUM(CASE WHEN m.estado = 'en_proceso' THEN 1 ELSE 0 END) AS mantenimientos_en_proceso,
+        SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
+        SUM(CASE WHEN m.estado = 'cancelado' THEN 1 ELSE 0 END) AS mantenimientos_cancelados,
+        COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
+        AVG(CASE 
+          WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+          THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
+          ELSE NULL 
+        END) AS tiempo_promedio_horas,
+        GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids
+      FROM bc_mantenimientos m
+      JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+      WHERE 1=1 ${whereConditions}
+      GROUP BY u.usu_documento, u.usu_nombre
+      HAVING total_mantenimientos > 0
+      ORDER BY total_mantenimientos DESC
+    `;
+    
+    const estadisticas = await sequelize.query(query, { 
+      replacements,
+      type: sequelize.QueryTypes.SELECT 
+    });
+    
+    const estadisticasConEstaciones = estadisticas.map(item => {
+      item.estaciones_ids = item.estaciones_ids ? item.estaciones_ids.split(',') : [];
+      
+      item.eficiencia = item.total_mantenimientos > 0
+        ? ((item.mantenimientos_finalizados / item.total_mantenimientos) * 100).toFixed(2)
+        : "0.00";
+        
+      return item;
+    });
+    
+    res.send({ data: estadisticasConEstaciones });
+  } catch (error) {
+    console.error("Error al obtener estadísticas por empresa:", error);
+    handleHttpError(res, "ERROR_GET_ESTADISTICAS_BY_EMPRESA");
+  }
+};
+const getEstadisticasOperariosByEstacion = async (req, res) => {
+  try {
+    const { estacionId } = req.params;
+    const { fecha_inicio, fecha_fin, operario_id } = req.query;
+    
+    
+    const checkQuery = `SELECT COUNT(*) as total FROM bc_mantenimientos WHERE estacion_id = :estacionId`;
+    const checkResult = await sequelize.query(checkQuery, { 
+      replacements: { estacionId },
+      type: sequelize.QueryTypes.SELECT 
+    });
+    
+    let whereConditions = ' AND m.estacion_id = :estacionId';
+    const replacements = { estacionId };
+    
+    if (fecha_inicio) {
+      whereConditions += ' AND DATE(m.fecha_creacion) >= DATE(:fecha_inicio)';
+      replacements.fecha_inicio = fecha_inicio;
+    }
+    
+    if (fecha_fin) {
+      whereConditions += ' AND DATE(m.fecha_creacion) <= DATE(:fecha_fin)';
+      replacements.fecha_fin = fecha_fin;
+    }
+    
+    if (operario_id) {
+      whereConditions += ' AND m.operario_id = :operario_id';
+      replacements.operario_id = operario_id;
+    }
+    
+    // Consulta principal modificada para incluir todos los estados
+    const query = `
+      SELECT 
+        u.usu_documento AS operario_id,
+        u.usu_nombre AS nombre_operario,
+        m.empresa_id AS empresa_id,
+        m.estacion_id,
+        COUNT(m.id) AS total_mantenimientos,
+        SUM(CASE WHEN m.estado = 'finalizado' THEN 1 ELSE 0 END) AS mantenimientos_finalizados,
+        SUM(CASE WHEN m.estado = 'en_proceso' THEN 1 ELSE 0 END) AS mantenimientos_en_proceso,
+        SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
+        SUM(CASE WHEN m.estado = 'cancelado' THEN 1 ELSE 0 END) AS mantenimientos_cancelados,
+        COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
+        AVG(CASE WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+            THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
+            ELSE NULL END) AS tiempo_promedio_horas
+      FROM bc_mantenimientos m
+      JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+      WHERE 1=1 ${whereConditions}
+      GROUP BY u.usu_documento, u.usu_nombre, m.empresa_id, m.estacion_id
+      HAVING total_mantenimientos > 0
+    `;
+    
+    const estadisticas = await sequelize.query(query, { 
+      replacements,
+      type: sequelize.QueryTypes.SELECT 
+    });
+    
+    // Calcular eficiencia y otras métricas
+    const estadisticasEnriquecidas = estadisticas.map(item => {
+      // Añadir eficiencia
+      item.eficiencia = item.total_mantenimientos > 0
+        ? ((item.mantenimientos_finalizados / item.total_mantenimientos) * 100).toFixed(2)
+        : "0.00";
+      
+      return item;
+    });
+    
+    // Devolver los resultados enriquecidos
+    res.send({ data: estadisticasEnriquecidas });
+  } catch (error) {
+    console.error("Error en estadísticas por estación:", error);
+    res.status(500).send({ 
+      error: "ERROR_GET_ESTADISTICAS_BY_ESTACION",
+      message: error.message 
+    });
+  }
+
+  
+};
+
+const getComponentesPorBicicleta = async (req, res) => {
+    try {
+        const { bicicleta_id } = matchedData(req);
+        
+        const componentes = await componenteModels.findAll({
+            attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+        });
+
+        const historialesRecientes = await historialMantenimientoModels.findAll({
+            attributes: [
+                'componente_id',
+                [sequelize.fn('MAX', sequelize.col('bc_historial_mantenimientos.id')), 'max_id']
+            ],
+            include: [
+                {
+                    model: mantenimientoModels,
+                    where: { bicicleta_id },
+                    attributes: []
+                }
+            ],
+            group: ['componente_id'],
+            raw: true
+        });
+
+        const historialIds = historialesRecientes.map(h => h.max_id).filter(id => id);
+
+        const historiales = historialIds.length > 0 
+            ? await historialMantenimientoModels.findAll({
+                where: { id: { [Op.in]: historialIds } },
+                attributes: ['componente_id', 'estado_nuevo']
+            })
+            : [];
+
+        const historialMap = new Map(
+            historiales.map(h => [h.componente_id, h.estado_nuevo])
+        );
+
+        const componentesConEstado = componentes.map(componente => ({
+            comp_id: componente.comp_id,
+            comp_nombre: componente.comp_nombre,
+            categoria_id: componente.categoria_id,
+            estado_actual: historialMap.get(componente.comp_id) || 'ok'
+        }));
+
+        res.send({ data: componentesConEstado });
+            
+    } catch (error) {
+        console.error(error);
+        res.status(500).send({ error: "ERROR_GET_COMPONENTES_BICICLETA" });
+    }
+};
+
+const trasladoMasivoMantenimientos = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { operario_origen, operario_destino } = matchedData(req);
+        
+        const mantenimientosPendientes = await mantenimientoModels.findAll({
+            where: { 
+                operario_id: operario_origen,
+                estado: 'pendiente'
+            },
+            transaction
+        });
+
+        if (mantenimientosPendientes.length === 0) {
+            await transaction.rollback();
+            return res.status(404).send({ 
+                error: "No se encontraron mantenimientos pendientes para este operario" 
+            });
+        }
+
+        const mantenimientoIds = mantenimientosPendientes.map(m => m.id);
+
+        // Actualizar mantenimientos
+        await mantenimientoModels.update(
+            { operario_id: operario_destino },
+            { 
+                where: { 
+                    operario_id: operario_origen,
+                    estado: 'pendiente'
+                },
+                transaction
+            }
+        );
+
+        // Actualizar historial
+        await historialMantenimientoModels.update(
+            { operario_id: operario_destino },
+            {
+                where: {
+                    mantenimiento_id: {
+                        [Op.in]: mantenimientoIds
+                    }
+                },
+                transaction
+            }
+        );
+
+        await transaction.commit();
+
+        const cantidadTrasladados = mantenimientosPendientes.length;
+        
+        res.send({ 
+            success: true,
+            message: `Se trasladaron ${cantidadTrasladados} mantenimientos pendientes (incluyendo historial)`,
+            cantidad: cantidadTrasladados
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error(error);
+        handleHttpError(res, "ERROR_TRASLADO_MASIVO_MANTENIMIENTOS");
+    }
+};
+
+const getHistorialMantenimiento = async (req, res) => {
+    try {
+        const { mantenimiento_id } = matchedData(req);
+        
+        const data = await historialMantenimientoModels.findAll({
+            where: { mantenimiento_id },
+            include: [
+                {
+                    model: componenteModels,
+                    attributes: ['comp_id', 'comp_nombre', 'categoria_id'],
+                    include: [
+                        {
+                            model: categoriaComponenteModels,
+                            attributes: ['cat_id', 'cat_nombre', 'cat_descripcion']
+                        }
+                    ]
+                }
+            ],
+            order: [['fecha_registro', 'DESC']]
+        });
+        
+        res.send({ data });
+    } catch (error) {
+        console.error(error);
+        handleHttpError(res, "ERROR_GET_HISTORIAL");
+    }
+};
 const exportMantenimientosPorEmpresa = async (req, res) => {
     try {
         const { empresa_id } = matchedData(req);

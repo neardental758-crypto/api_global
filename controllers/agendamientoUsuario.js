@@ -10,22 +10,50 @@ const nodemailer = require('nodemailer');
 
 
 const getItems = async (req, res) => {
-    const filtro = JSON.parse(req.query.filter);
-    const organization = filtro.organizationId;
+    let filtro = {};
     try {
+        filtro = req.query && req.query.filter ? JSON.parse(req.query.filter) : {};
+    } catch (e) {
+        filtro = {};
+    }
+    const organizationRaw = filtro.organizationId;
+    const organization = (organizationRaw !== undefined && organizationRaw !== null && !isNaN(Number(organizationRaw)))
+        ? Number(organizationRaw)
+        : organizationRaw;
+
+    try {
+        const agendadoCount = await agendamientoUsuariosModels.count();
+        const empresa = organization ? await Empresa.findByPk(String(organization)) : null;
+        const empresaNombre = empresa && empresa.emp_nombre ? String(empresa.emp_nombre) : null;
+        const usersInOrg = organization
+            ? await Usuario.count({
+                where: {
+                    usu_empresa: {
+                        [Op.or]: [String(organization), ...(empresaNombre ? [empresaNombre] : [])],
+                    },
+                },
+            })
+            : null;
+        console.log('[bc_agendado.getItems] debug', {
+            organizationId: organization,
+            organizationIdType: typeof organization,
+            empresaNombre,
+            agendadoCount,
+            usersInOrg,
+        });
         const data = await agendamientoUsuariosModels.findAll({
             include: [
                 {
                     model: Usuario,
                     attributes: ['usu_documento', 'usu_nombre'],
                     as: 'Agenda',
-                    include: [{
-                        model: Empresa,
-                        attributes: ['emp_id'],
-                        where: {
-                            emp_id: organization
+                    where: organization
+                        ? {
+                            usu_empresa: {
+                                [Op.or]: [String(organization), ...(empresaNombre ? [empresaNombre] : [])],
+                            },
                         }
-                    }],
+                        : undefined,
                     required: true
                 }, {
                     model: Practica,
@@ -39,6 +67,7 @@ const getItems = async (req, res) => {
                 }
             ]
         });
+        console.log('[bc_agendado.getItems] rows:', Array.isArray(data) ? data.length : data);
         res.send({ data });
     } catch (error) {
         httpError(res, `ERROR_GET_AGENDAMIENTO_ACTIVO`);
