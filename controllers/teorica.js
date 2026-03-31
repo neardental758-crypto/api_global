@@ -18,25 +18,8 @@ const getItems = async (req, res) => {
         : organizationRaw;
 
     try {
-        const teoricaCount = await teoricaModels.count();
         const empresa = organization ? await Empresa.findByPk(String(organization)) : null;
         const empresaNombre = empresa && empresa.emp_nombre ? String(empresa.emp_nombre) : null;
-        const usersInOrg = organization
-            ? await Usuario.count({
-                where: {
-                    usu_empresa: {
-                        [Op.or]: [String(organization), ...(empresaNombre ? [empresaNombre] : [])],
-                    },
-                },
-            })
-            : null;
-        console.log('[bc_teorica.getItems] debug', {
-            organizationId: organization,
-            organizationIdType: typeof organization,
-            empresaNombre,
-            teoricaCount,
-            usersInOrg,
-        });
         const data = await teoricaModels.findAll({
             include: [{
                 model: Usuario,
@@ -51,7 +34,6 @@ const getItems = async (req, res) => {
                 required: true
             }]
         });
-        console.log('[bc_teorica.getItems] rows:', Array.isArray(data) ? data.length : data);
         res.send({ data });
     } catch (error) {
         httpError(res, "ERROR_GET_TEORICA");

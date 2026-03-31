@@ -22,25 +22,8 @@ const getItems = async (req, res) => {
         : organizationRaw;
 
     try {
-        const agendadoCount = await agendamientoUsuariosModels.count();
         const empresa = organization ? await Empresa.findByPk(String(organization)) : null;
         const empresaNombre = empresa && empresa.emp_nombre ? String(empresa.emp_nombre) : null;
-        const usersInOrg = organization
-            ? await Usuario.count({
-                where: {
-                    usu_empresa: {
-                        [Op.or]: [String(organization), ...(empresaNombre ? [empresaNombre] : [])],
-                    },
-                },
-            })
-            : null;
-        console.log('[bc_agendado.getItems] debug', {
-            organizationId: organization,
-            organizationIdType: typeof organization,
-            empresaNombre,
-            agendadoCount,
-            usersInOrg,
-        });
         const data = await agendamientoUsuariosModels.findAll({
             include: [
                 {
@@ -67,7 +50,6 @@ const getItems = async (req, res) => {
                 }
             ]
         });
-        console.log('[bc_agendado.getItems] rows:', Array.isArray(data) ? data.length : data);
         res.send({ data });
     } catch (error) {
         httpError(res, `ERROR_GET_AGENDAMIENTO_ACTIVO`);
