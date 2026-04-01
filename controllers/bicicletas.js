@@ -1388,8 +1388,55 @@ const getBikeMetrics = async (req, res) => {
   }
 };
 
+const getReservaActivaPorBicicleta = async (req, res) => {
+    try {
+        req = matchedData(req);
+        const { bic_id } = req;
+
+        const reserva = await Reserva.findOne({
+            where: {
+                res_bicicleta: bic_id,
+                res_estado: 'ACTIVA'
+            },
+            order: [['res_id', 'DESC']],
+        });
+
+        if (!reserva) {
+            return res.status(404).json({
+                success: false,
+                message: 'No se encontró reserva ACTIVA para esta bicicleta'
+            });
+        }
+
+        const bicicleta = await bicicletasModels.findByPk(bic_id, {
+            attributes: ['bic_id', 'bic_nombre', 'bic_numero', 'bic_estado', 'bic_estacion'],
+        });
+
+        const usuario = await usuarioModels.findByPk(String(reserva.res_usuario), {
+            attributes: ['usu_documento', 'usu_nombre'],
+        });
+
+        return res.status(200).json({
+            success: true,
+            data: {
+                reserva,
+                usuario: usuario ? usuario : null,
+                bicicleta: bicicleta ? bicicleta : null,
+            }
+        });
+    } catch (error) {
+        console.error('ERROR_GET_RESERVA_ACTIVA_BICI:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Error obteniendo reserva activa de la bicicleta',
+            error: error.message,
+        });
+    }
+};
+
 module.exports = {
     getItems, getItem, getItemNumero, getItemEstacion, getItemFlota, createItem, updateItem, deleteItem, getItems_cortezza, get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem,
     getBicisByEstacion,getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa,
-    getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics
+    getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
+    getReservaActivaPorBicicleta
 }
