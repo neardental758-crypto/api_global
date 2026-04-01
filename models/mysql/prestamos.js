@@ -52,6 +52,10 @@ const Prestamos = sequelize.define(
         pre_estado: {
             type: DataTypes.STRING,
         },
+        pre_finalizado_por: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
         pre_modulo: {
             type: DataTypes.STRING,
             allowNull: true

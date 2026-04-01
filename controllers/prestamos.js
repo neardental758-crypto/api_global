@@ -253,7 +253,43 @@ const getItemAllPrestamoFinalizados3g = async (req, res) => {
 
     }
 
-    res.send({ data: filteredData });
+    const finalizerDocs = Array.from(
+      new Set(
+        filteredData
+          .map((record) => record && record.pre_finalizado_por)
+          .filter((doc) => doc),
+      ),
+    );
+
+    let finalizerNameByDoc = {};
+    if (finalizerDocs.length > 0) {
+      const finalizers = await Usuario.findAll({
+        where: {
+          usu_documento: {
+            [Op.in]: finalizerDocs,
+          },
+        },
+        attributes: ['usu_documento', 'usu_nombre'],
+      });
+
+      finalizerNameByDoc = finalizers.reduce((acc, u) => {
+        const doc = u && u.usu_documento ? String(u.usu_documento) : null;
+        if (doc) {
+          acc[doc] = u.usu_nombre || null;
+        }
+        return acc;
+      }, {});
+    }
+
+    const dataWithFinalizerName = filteredData.map((record) => {
+      const doc = record && record.pre_finalizado_por ? String(record.pre_finalizado_por) : null;
+      return {
+        ...record.toJSON(),
+        finalizado_por_nombre: doc ? finalizerNameByDoc[doc] || null : null,
+      };
+    });
+
+    res.send({ data: dataWithFinalizerName });
   } catch (e) {
     console.error('[5] 3G Error:', e.message);
     httpError(res, `Error prestamos finalizados ${e}`)
@@ -349,7 +385,43 @@ const getItemAllPrestamoFinalizados4g = async (req, res) => {
 
     }
 
-    res.send({ data: filteredData });
+    const finalizerDocs = Array.from(
+      new Set(
+        filteredData
+          .map((record) => record && record.pre_finalizado_por)
+          .filter((doc) => doc),
+      ),
+    );
+
+    let finalizerNameByDoc = {};
+    if (finalizerDocs.length > 0) {
+      const finalizers = await Usuario.findAll({
+        where: {
+          usu_documento: {
+            [Op.in]: finalizerDocs,
+          },
+        },
+        attributes: ['usu_documento', 'usu_nombre'],
+      });
+
+      finalizerNameByDoc = finalizers.reduce((acc, u) => {
+        const doc = u && u.usu_documento ? String(u.usu_documento) : null;
+        if (doc) {
+          acc[doc] = u.usu_nombre || null;
+        }
+        return acc;
+      }, {});
+    }
+
+    const dataWithFinalizerName = filteredData.map((record) => {
+      const doc = record && record.pre_finalizado_por ? String(record.pre_finalizado_por) : null;
+      return {
+        ...record.toJSON(),
+        finalizado_por_nombre: doc ? finalizerNameByDoc[doc] || null : null,
+      };
+    });
+
+    res.send({ data: dataWithFinalizerName });
   } catch (e) {
     console.error('[5] Error:', e.message);
     httpError(res, `Error prestamos finalizados ${e}`)
@@ -989,7 +1061,16 @@ const finalizeLoan = async (req, res) => {
 
   try {
     const { pre_id } = req.params;
-    const { userId } = req.body;
+    const { userId, finalizedBy } = req.body;
+
+    let finalizedByName = null;
+    if (finalizedBy) {
+      const finalizerUser = await Usuario.findByPk(String(finalizedBy), {
+        attributes: ['usu_documento', 'usu_nombre'],
+        transaction,
+      });
+      finalizedByName = finalizerUser ? finalizerUser.usu_nombre : null;
+    }
 
     const prestamo = await prestamosModels.findByPk(pre_id, {
       include: [
@@ -1106,14 +1187,16 @@ const finalizeLoan = async (req, res) => {
       await prestamosModels.update({
         pre_estado: 'FINALIZADA',
         pre_devolucion_fecha: fechaCompleta,
-        pre_devolucion_hora: soloHora
+        pre_devolucion_hora: soloHora,
+        pre_finalizado_por: finalizedBy ? String(finalizedBy) : null,
       }, {
         where: { pre_id: pre_id },
         transaction
       });
     } else {
       await prestamosModels.update({
-        pre_estado: 'FINALIZADA'
+        pre_estado: 'FINALIZADA',
+        pre_finalizado_por: finalizedBy ? String(finalizedBy) : null,
       }, {
         where: { pre_id: pre_id },
         transaction
@@ -1157,7 +1240,9 @@ const finalizeLoan = async (req, res) => {
         nueva_clave: esMicrosistema ? 'Sin cambio (microsistema)' : claveNueva,
         bicicletero_id: bicicletero.bro_id,
         otros_prestamos_finalizados: otrosPrestamosActivos.length,
-        es_microsistema: esMicrosistema
+        es_microsistema: esMicrosistema,
+        finalizado_por: finalizedBy ? String(finalizedBy) : null,
+        finalizado_por_nombre: finalizedByName,
       }
     });
 
@@ -1178,7 +1263,16 @@ const finalizeLoan4g = async (req, res) => {
 
   try {
     const { pre_id } = req.params;
-    const { userId } = req.body;
+    const { userId, finalizedBy } = req.body;
+
+    let finalizedByName = null;
+    if (finalizedBy) {
+      const finalizerUser = await Usuario.findByPk(String(finalizedBy), {
+        attributes: ['usu_documento', 'usu_nombre'],
+        transaction,
+      });
+      finalizedByName = finalizerUser ? finalizerUser.usu_nombre : null;
+    }
 
 
     const prestamo = await prestamosModels.findByPk(pre_id, {
@@ -1261,14 +1355,16 @@ const finalizeLoan4g = async (req, res) => {
       await prestamosModels.update({
         pre_estado: 'FINALIZADA',
         pre_devolucion_fecha: fechaCompleta,
-        pre_devolucion_hora: soloHora
+        pre_devolucion_hora: soloHora,
+        pre_finalizado_por: finalizedBy ? String(finalizedBy) : null,
       }, {
         where: { pre_id: pre_id },
         transaction
       });
     } else {
       await prestamosModels.update({
-        pre_estado: 'FINALIZADA'
+        pre_estado: 'FINALIZADA',
+        pre_finalizado_por: finalizedBy ? String(finalizedBy) : null,
       }, {
         where: { pre_id: pre_id },
         transaction
@@ -1291,7 +1387,9 @@ const finalizeLoan4g = async (req, res) => {
         pre_id: pre_id,
         estado_prestamo: 'FINALIZADA',
         estado_bicicleta: 'DISPONIBLE',
-        otros_prestamos_finalizados: otrosPrestamosActivos.length
+        otros_prestamos_finalizados: otrosPrestamosActivos.length,
+        finalizado_por: finalizedBy ? String(finalizedBy) : null,
+        finalizado_por_nombre: finalizedByName,
       }
     });
 
