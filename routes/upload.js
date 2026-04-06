@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const sharp = require('sharp');
+let sharp;
+try {
+    sharp = require('sharp');
+} catch (e) {
+    sharp = null;
+}
 const path = require('path');
 const fs = require('fs');
 
@@ -47,15 +52,19 @@ router.post('/', upload.single('image'), async (req, res) => {
         // Process image with Sharp
         // We compress it to JPEG format with adjusted quality to ensure it typically falls under 350kb
         // Resize parameters: max width 1200 or max height 1200 (maintaining aspect ratio)
-        await sharp(req.file.buffer)
-            .resize({
-                width: 1200,
-                height: 1200,
-                fit: sharp.fit.inside,
-                withoutEnlargement: true
-            })
-            .jpeg({ quality: 80 }) // 80 quality is usually a good balance to stay under 350kb for 1200px images
-            .toFile(filePath);
+        if (sharp) {
+            await sharp(req.file.buffer)
+                .resize({
+                    width: 1200,
+                    height: 1200,
+                    fit: sharp.fit.inside,
+                    withoutEnlargement: true
+                })
+                .jpeg({ quality: 80 }) // 80 quality is usually a good balance to stay under 350kb for 1200px images
+                .toFile(filePath);
+        } else {
+            fs.writeFileSync(filePath, req.file.buffer);
+        }
 
         // Retrieve file stats to log and verify the final size
         const stats = fs.statSync(filePath);

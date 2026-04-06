@@ -6,7 +6,8 @@ const { validatorCreateBicycle, validatorGetBicycle, validatorGetNombre,
     } = require('../validators/bicicletasValidators');
 const { getItems, createItem, getItem, getItemEstacion, getItemFlota, updateItem, getItemNumero, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem, getItems_cortezza,
      get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getBicisByEstacion,
-     getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa, getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics
+     getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa, getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
+     getReservaActivaPorBicicleta
 } = require('../controllers/bicicletas');
 const authMiddleware = require('../middleware/session');
 
@@ -15,6 +16,13 @@ router.get("/", authMiddleware(["all"]), getItems);
 router.get("/bicicletero/", authMiddleware(["all"]), getItemsFilterToBicicleteros);
 
 router.get("/id/:bic_id", authMiddleware(["all"]), validatorGetBicycle, getItem);
+
+router.get(
+    "/reserva-activa/:bic_id",
+    authMiddleware(["all"]),
+    validatorGetBicycle,
+    getReservaActivaPorBicicleta,
+);
 
 router.get("/numeroVehiculo/:bic_numero", authMiddleware(["all"]), validatorGetNumero, getItemNumero);
 

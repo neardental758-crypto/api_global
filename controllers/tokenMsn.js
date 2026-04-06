@@ -115,11 +115,11 @@ const deleteItem = async (req, res) => {
 const getNotificationUsersByOrganization = async (req, res) => {
   try {
     const { organizationId } = req.params;
-    
+
     const empresa = await Empresa.findOne({
       where: { emp_id: organizationId }
     });
-    
+
     if (!empresa) {
       return res.status(404).json({ error: 'Empresa no encontrada' });
     }
@@ -133,20 +133,34 @@ const getNotificationUsersByOrganization = async (req, res) => {
       }],
       attributes: ['documento', 'email', 'token']
     });
-    
+
     const userDocumentos = users.map(u => u.documento);
+
+    const estadosPrestamoActivo = ['ACTIVA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA'];
     
     const prestamosActivos = await Prestamos.findAll({
       where: {
         pre_usuario: { [Op.in]: userDocumentos },
-        pre_estado: 'activo'
+        [Op.and]: [
+          { pre_estado: { [Op.ne]: null } },
+          {
+            [Op.or]: [
+              { pre_estado: { [Op.in]: estadosPrestamoActivo } },
+              {
+                pre_estado: {
+                  [Op.in]: estadosPrestamoActivo.map((e) => e.toLowerCase()),
+                },
+              },
+            ],
+          },
+        ],
       },
       attributes: ['pre_usuario'],
       group: ['pre_usuario']
     });
-    
+
     const usuariosConPrestamos = new Set(prestamosActivos.map(p => p.pre_usuario));
-    
+
     const formattedUsers = users.map(user => ({
       documento: user.documento,
       email: user.email,

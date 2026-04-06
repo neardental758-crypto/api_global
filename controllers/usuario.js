@@ -588,11 +588,19 @@ const patchOrganization = async (req, res) => {
     const objetoACambiar = req.body.nuevaEmpresa;
     const usu_documento = req.params.usu_documento;
     try {
-        const nombreEmpresa = await empresaModels.findOne({
+        let nombreEmpresa = await empresaModels.findOne({
             where: {
                 emp_id: objetoACambiar
             }
         });
+
+        if (!nombreEmpresa && objetoACambiar) {
+            nombreEmpresa = await empresaModels.findOne({
+                where: {
+                    emp_nombre: objetoACambiar
+                }
+            });
+        }
         if (!nombreEmpresa) {
             return res.status(404).json({ error: 'Empresa no encontrada' });
         }

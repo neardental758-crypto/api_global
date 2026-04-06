@@ -86,8 +86,17 @@ const getItem = async (req, res) => {
 
 const getByUsuario = async (req, res) => {
     try {
-        req = matchedData(req);
-        const { ur_usuario_id } = req;
+        const matched = matchedData(req) || {};
+        const ur_usuario_id =
+            (req && req.params && req.params.ur_usuario_id) ||
+            matched.ur_usuario_id;
+
+        if (!ur_usuario_id) {
+            return res.status(400).send({
+                error: "ur_usuario_id requerido",
+            });
+        }
+
         const data = await usuariosRolesModels.findAll({
             where: { ur_usuario_id },
             include: [

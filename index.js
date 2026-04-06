@@ -18,7 +18,7 @@ app.use(express.static("storage"))
 // Expose the static resized images folder for React Native
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-const port = process.env.PORT || 3002;
+const port = process.env.API_PORT || process.env.PORT || 3002;
 cron;
 startSessionCleanup();
 startAgendamientosCleanup();
