@@ -20,6 +20,9 @@ const getItems = async (req, res) => {
 
 const getItemChangeKey = async (req, res) => {
     try {
+        const params = req.query && req.query.filter ? JSON.parse(req.query.filter) : req.query;
+        const empresaId = params && (params.empresa_id || params.organizationId || params.est_empresa);
+
         const data = await historialesModels.findAll({
             where: { his_estado : 'CAMBIAR CLAVE' },
             include:[{
@@ -29,9 +32,20 @@ const getItemChangeKey = async (req, res) => {
               {
                 model: Estacion,
                 attributes: ['est_estacion', 'est_empresa'],
+                ...(empresaId
+                  ? {
+                      required: true,
+                    }
+                  : {}),
                 include:[{
                     model: Empresa,
                     attributes: ['emp_id', 'emp_nombre'],
+                    ...(empresaId
+                      ? {
+                          where: { emp_id: empresaId },
+                          required: true,
+                        }
+                      : {}),
                  }],
             }],
             order: [

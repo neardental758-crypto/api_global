@@ -180,8 +180,8 @@ if (MOTORDB === 'mysql') {
     Usuario.belongsTo(Extendido, { foreignKey: "usu_documento", as: 'extendido' });
     Extendido.hasOne(Usuario, { foreignKey: "usu_documento", as: 'extendido' });
 
-    Claves.belongsTo(Estacion, { foreignKey: "his_estacion" });
-    Estacion.hasMany(Claves, { foreignKey: "his_estacion" });
+    Claves.belongsTo(Estacion, { foreignKey: "his_estacion", targetKey: "est_estacion" });
+    Estacion.hasMany(Claves, { foreignKey: "his_estacion", sourceKey: "est_estacion" });
 
     Claves.belongsTo(Bicicleta, { foreignKey: "his_bicicleta" });
     Bicicleta.hasOne(Claves, { foreignKey: "his_bicicleta" });
@@ -198,8 +198,8 @@ if (MOTORDB === 'mysql') {
     Comentarios.belongsTo(Prestamos, { foreignKey: "com_prestamo" });
     Prestamos.hasMany(Comentarios, { foreignKey: "com_prestamo" });
 
-    Prestamos.belongsTo(Estacion, { foreignKey: "pre_retiro_estacion" });
-    Estacion.hasMany(Prestamos, { foreignKey: "pre_retiro_estacion" });
+    Prestamos.belongsTo(Estacion, { foreignKey: "pre_retiro_estacion", targetKey: "est_estacion" });
+    Estacion.hasMany(Prestamos, { foreignKey: "pre_retiro_estacion", sourceKey: "est_estacion" });
 
     Comentarios.belongsTo(Usuario, { foreignKey: "com_usuario" });
     Usuario.hasMany(Comentarios, { foreignKey: "com_usuario" });

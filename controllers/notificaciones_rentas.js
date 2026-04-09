@@ -45,17 +45,38 @@ const getNotificaciones = async (req, res) => {
       order: [['not_fecha_creacion', 'DESC']]
     });
 
+    console.log('[getNotificaciones] total:', Array.isArray(data) ? data.length : 0);
+    console.log(
+      '[getNotificaciones] sample include keys:',
+      data && data[0] ? Object.keys(data[0].dataValues || {}) : null,
+      'renta?',
+      Boolean(data && data[0] && data[0].renta),
+    );
+
     const dataWithInfo = data.map(notificacion => {
       const renta = notificacion.renta;
-      const usuario = renta?.bc_usuario;
+      const usuario = renta?.usuario || renta?.bc_usuario;
       const estacion = renta?.bc_estacione;
       const empresa = estacion?.bc_empresa;
+
+      if (notificacion?.not_id && (!usuario || !estacion)) {
+        console.log('[getNotificaciones] missing include for not_id:', notificacion.not_id, {
+          hasRenta: Boolean(renta),
+          hasUsuario: Boolean(usuario),
+          hasEstacion: Boolean(estacion),
+          not_usuario: notificacion.not_usuario,
+          pre_usuario: renta?.pre_usuario,
+          pre_retiro_estacion: renta?.pre_retiro_estacion,
+        });
+      }
 
       return {
         ...notificacion.dataValues,
         usuario_nombre: usuario?.usu_nombre || notificacion.not_usuario,
+        email: usuario?.usu_email || null,
+        phoneNumber: usuario?.usu_telefono || null,
         estacion_nombre: estacion?.est_estacion || 'N/A',
-        empresa_nombre: empresa?.emp_nombre || 'N/A',
+        empresa_nombre: empresa?.emp_nombre || usuario?.usu_empresa || 'N/A',
         horas_permitidas: estacion?.est_last_conect || 'N/A'
       };
     });

@@ -20,6 +20,7 @@ const {
     getEstadisticasOperariosByEstacion,
     getEstadisticasOperariosByEmpresa,
     getRendimientoOperarios,
+    getProductividadOperarios,
     getComponentesPorBicicleta,
     trasladoMasivoMantenimientos,
     getHistorialMantenimiento,
@@ -39,7 +40,7 @@ const {
     validatorCreateMantenimientosMasivo,
     validatorUpdateHistorial,
     validatorCreateHistorial,
-        validatorGetEstadisticasOperario,
+    validatorGetEstadisticasOperario,
     validatorGetRendimientoOperarios,
     validatorTrasladoMasivo,
     validatorGetHistorial
@@ -77,7 +78,6 @@ router.get("/operario/:operario_id", authMiddleware(["all"]), validatorGetPorOpe
 
 router.patch("/historial/:historial_id", authMiddleware(["all"]), validatorUpdateHistorial, actualizarHistorialComponente);
 
-
 router.get("/componentes-categorias", authMiddleware(["all"]), getComponentesConCategorias);
 
 router.post("/masivo", authMiddleware(["all"]), validatorCreateMantenimientosMasivo, crearMantenimientosMasivo);
@@ -94,10 +94,10 @@ router.get('/historial/:mantenimiento_id', authMiddleware(["all"]), validatorGet
 router.get("/export/empresa/:empresa_id", authMiddleware(["all"]), validatorGetPorEmpresa, exportMantenimientosPorEmpresa);
 router.get("/export/estacion/:estacion_id", authMiddleware(["all"]), validatorGetPorEstacion, exportMantenimientosPorEstacion);
 
-
 // Endpoints para estadísticas de operarios
 router.get("/operarios/estadisticas", authMiddleware(["all"]), getEstadisticasOperarios);
 router.get("/operarios/rendimiento", authMiddleware(["all"]), validatorGetRendimientoOperarios, getRendimientoOperarios);
+router.get("/operarios/productividad", authMiddleware(["all"]), getProductividadOperarios);
 router.get("/operarios/estadisticas/empresa/:empresaId", authMiddleware(["all"]), getEstadisticasOperariosByEmpresa);
 router.get("/operarios/estadisticas/estacion/:estacionId", authMiddleware(["all"]), getEstadisticasOperariosByEstacion);
 

@@ -1,6 +1,6 @@
 // controllers/mantenimientos.js
 const { sequelize } = require("../config/mysql");
-const { bicicletasModels, componenteModels, estadoComponenteModels, historialMantenimientoModels, categoriaComponenteModels} = require("../models");
+const { bicicletasModels, componenteModels, estadoComponenteModels, historialMantenimientoModels, categoriaComponenteModels, agendamientoOperarioModels, estacionModels } = require("../models");
 const { matchedData } = require("express-validator");
 const { mantenimientoModels } = require("../models");
 const { usuarioModels } = require("../models");
@@ -854,15 +854,6 @@ const getRendimientoOperarios = async (req, res) => {
                     THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
                     ELSE NULL 
                 END) AS tiempo_promedio_horas,
-                (
-                    SELECT COUNT(h.id) 
-                    FROM bc_historial_mantenimientos h
-                    JOIN bc_mantenimientos m2 ON h.mantenimiento_id = m2.id
-                    WHERE h.operario_id = u.usu_documento
-                    AND h.fecha_registro BETWEEN :fecha_inicio AND :fecha_fin
-                    ${empresa_id ? 'AND m2.empresa_id = :empresa_id' : ''}
-                    ${estacion_id ? 'AND m2.estacion_id = :estacion_id' : ''}
-                ) AS componentes_reparados,
                 GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids
             FROM bc_mantenimientos m
             JOIN bc_usuarios u ON m.operario_id = u.usu_documento
@@ -1000,7 +991,7 @@ const getEstadisticasOperariosByEstacion = async (req, res) => {
       whereConditions += ' AND DATE(m.fecha_creacion) >= DATE(:fecha_inicio)';
       replacements.fecha_inicio = fecha_inicio;
     }
-    
+
     if (fecha_fin) {
       whereConditions += ' AND DATE(m.fecha_creacion) <= DATE(:fecha_fin)';
       replacements.fecha_fin = fecha_fin;
@@ -1233,7 +1224,7 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
             mañana.setDate(mañana.getDate() + 1);
             whereClause.fecha_creacion = {
                 [Op.gte]: hoy,
-                [Op.lt]: mañana
+                [Op.lt]: mañana,
             };
         }
 
@@ -1272,13 +1263,13 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
             hasBicicletaFilter = true;
             bicicletaWhere[Op.or] = [
                 { bic_numero: { [Op.like]: `%${filterObj.bicicleta}%` } },
-                { bic_id: isNaN(filterObj.bicicleta) ? null : parseInt(filterObj.bicicleta) }
+                { bic_id: isNaN(filterObj.bicicleta) ? null : parseInt(filterObj.bicicleta) },
             ];
         }
 
         if (filterObj.ordenar_por === 'bicicletas_taller') {
             bicicletaWhere.bic_estado = {
-                [Op.in]: ['EN_MANTENIMIENTO', 'EN TALLER', 'REPARACION', 'REVISION']
+                [Op.in]: ['EN_MANTENIMIENTO', 'EN TALLER', 'REPARACION', 'REVISION'],
             };
         }
 
@@ -1426,7 +1417,7 @@ const exportMantenimientosPorEstacion = async (req, res) => {
             ],
             order: orderBy
         });
-        
+
         res.send({ data });
     } catch (error) {
         console.error(error);
@@ -1434,28 +1425,492 @@ const exportMantenimientosPorEstacion = async (req, res) => {
     }
 };
 
+
+const getProductividadOperarios = async (req, res) => {
+    const startedAt = Date.now();
+    const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+    try {
+        const queryParams = (req && req.query) || {};
+        let filterParams = {};
+        if (queryParams && queryParams.filter) {
+            try {
+                filterParams = JSON.parse(queryParams.filter);
+            } catch (e) {
+                filterParams = {};
+            }
+        }
+
+        const params = { ...queryParams, ...filterParams };
+        delete params.filter;
+
+        const { fecha_inicio, fecha_fin, empresa_id, estacion_id, operario_id } = params || {};
+
+        const debugDetalle =
+            params &&
+            (params.debug_detalle === true ||
+                params.debug_detalle === "1" ||
+                params.debug_detalle === 1);
+        const debugDetalleHeader =
+            req &&
+            req.headers &&
+            (req.headers["x-debug-detalle"] === "1" || req.headers["x-debug-detalle"] === 1);
+        const debugDetalleEnv =
+            process.env &&
+            (process.env.DEBUG_PRODUCTIVIDAD === "1" || process.env.DEBUG_PRODUCTIVIDAD === "true");
+        const debugAlwaysEnv =
+            process.env &&
+            (process.env.DEBUG_PRODUCTIVIDAD_ALWAYS === "1" ||
+                process.env.DEBUG_PRODUCTIVIDAD_ALWAYS === "true");
+
+        const auditEnabled =
+            !!debugAlwaysEnv || !!debugDetalle || !!debugDetalleHeader || !!debugDetalleEnv;
+
+        const soloFinalizados =
+            params &&
+            (params.solo_finalizados === true ||
+                params.solo_finalizados === "1" ||
+                params.solo_finalizados === 1);
+
+        if (!fecha_inicio || !fecha_fin) {
+            return handleHttpError(res, "FECHAS_REQUERIDAS", 400);
+        }
+
+        const start = new Date(fecha_inicio);
+        const end = new Date(fecha_fin);
+        if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
+            return handleHttpError(res, "RANGO_FECHAS_INVALIDO", 400);
+        }
+
+        console.log("[getProductividadOperarios][PING]", {
+            requestId,
+            hasFilter: !!(queryParams && queryParams.filter),
+            queryKeys: queryParams ? Object.keys(queryParams) : [],
+            paramsKeys: params ? Object.keys(params) : [],
+            debug_detalle_param: params ? params.debug_detalle : undefined,
+            solo_finalizados_param: params ? params.solo_finalizados : undefined,
+        });
+
+        console.log("[getProductividadOperarios][audit][FLAG]", {
+            requestId,
+            debug_detalle_param: params ? params.debug_detalle : undefined,
+            debug_detalle_header: req && req.headers ? req.headers["x-debug-detalle"] : undefined,
+            debug_detalle_env: process.env ? process.env.DEBUG_PRODUCTIVIDAD : undefined,
+            debug_always_env: process.env ? process.env.DEBUG_PRODUCTIVIDAD_ALWAYS : undefined,
+            auditEnabled,
+        });
+
+        if (auditEnabled) {
+            console.log("[getProductividadOperarios][audit][ON]", {
+                requestId,
+                fecha_inicio,
+                fecha_fin,
+                empresa_id,
+                estacion_id,
+                operario_id,
+                solo_finalizados: !!soloFinalizados,
+            });
+        }
+
+        const tzFrom = "+00:00";
+        const tzTo = "-05:00";
+        const fechaCreacionLocalDate = sequelize.fn(
+            "DATE",
+            sequelize.fn("CONVERT_TZ", sequelize.col("fecha_creacion"), tzFrom, tzTo),
+        );
+
+        const whereMant = {
+            [Op.and]: [
+                sequelize.where(fechaCreacionLocalDate, {
+                    [Op.gte]: fecha_inicio,
+                    [Op.lte]: fecha_fin,
+                }),
+            ],
+        };
+        if (empresa_id) whereMant.empresa_id = empresa_id;
+        if (estacion_id) whereMant.estacion_id = estacion_id;
+        if (operario_id) whereMant.operario_id = operario_id;
+        if (soloFinalizados) whereMant.estado = "finalizado";
+
+        const mantenimientosAgg = await mantenimientoModels.findAll({
+            attributes: [
+                [fechaCreacionLocalDate, "fecha"],
+                "operario_id",
+                "estacion_id",
+                "empresa_id",
+                [
+                    sequelize.fn(
+                        "COUNT",
+                        sequelize.fn(
+                            "DISTINCT",
+                            sequelize.col("bc_mantenimientos.bicicleta_id"),
+                        ),
+                    ),
+                    "bicicletas_revisadas",
+                ],
+                [
+                    sequelize.fn(
+                        "COUNT",
+                        sequelize.fn(
+                            "DISTINCT",
+                            sequelize.literal(
+                                "CASE WHEN bc_bicicleta.bic_estado IS NOT NULL AND UPPER(bc_bicicleta.bic_estado) <> 'DISPONIBLE' THEN bc_mantenimientos.bicicleta_id END",
+                            ),
+                        ),
+                    ),
+                    "bicicletas_no_disponibles_revisadas",
+                ],
+            ],
+            where: whereMant,
+            include: [
+                {
+                    model: bicicletasModels,
+                    attributes: [],
+                    required: false,
+                },
+            ],
+            group: [fechaCreacionLocalDate, "operario_id", "estacion_id", "empresa_id"],
+            raw: true,
+        });
+
+        const estaciones = Array.from(
+            new Set(
+                (mantenimientosAgg || [])
+                    .map((x) => (x ? x.estacion_id : null))
+                    .filter((x) => x !== null && x !== undefined),
+            ),
+        );
+
+        const estacionesNumericas = estaciones
+            .map((x) => String(x).trim())
+            .filter((x) => /^\d+$/.test(x))
+            .map((x) => Number(x));
+
+        const estRows = estacionesNumericas.length
+            ? await estacionModels.findAll({
+                  attributes: ["est_id", "est_estacion"],
+                  where: { est_id: { [Op.in]: estacionesNumericas } },
+                  raw: true,
+              })
+            : [];
+
+        const estacionIdToNombre = new Map();
+        for (const e of estRows || []) {
+            if (e && e.est_id !== undefined && e.est_id !== null) {
+                estacionIdToNombre.set(Number(e.est_id), e.est_estacion);
+            }
+        }
+
+        const estacionesBiciKeys = estaciones.map((x) => {
+            const str = String(x).trim();
+            if (/^\d+$/.test(str)) {
+                const nombre = estacionIdToNombre.get(Number(str));
+                return nombre ? String(nombre) : str;
+            }
+            return str;
+        });
+
+        if (auditEnabled) {
+            console.log("[getProductividadOperarios][audit][insumos]", {
+                requestId,
+                whereMant,
+                estaciones_raw: estaciones,
+                estaciones_bici_keys: estacionesBiciKeys,
+                estaciones_id_to_nombre_sample: Array.from(estacionIdToNombre.entries()).slice(0, 10),
+                mantenimientosAgg_len: Array.isArray(mantenimientosAgg) ? mantenimientosAgg.length : null,
+                mantenimientosAgg_sample: Array.isArray(mantenimientosAgg) ? mantenimientosAgg.slice(0, 5) : null,
+            });
+        }
+
+        const dispRows = estacionesBiciKeys.length
+            ? await bicicletasModels.findAll({
+                  attributes: [
+                      [sequelize.col("bic_estacion"), "estacion_id"],
+                      [sequelize.fn("COUNT", sequelize.col("bic_id")), "bicicletas_disponibles"],
+                  ],
+                  where: {
+                      [Op.and]: [
+                          sequelize.where(
+                              sequelize.fn("UPPER", sequelize.col("bic_estado")),
+                              "DISPONIBLE",
+                          ),
+                      ],
+                      bic_estacion: { [Op.in]: estacionesBiciKeys },
+                  },
+                  group: ["bic_estacion"],
+                  raw: true,
+              })
+            : [];
+
+        const dispMap = new Map();
+        for (const d of dispRows || []) {
+            dispMap.set(String(d.estacion_id), Number(d.bicicletas_disponibles || 0));
+        }
+
+        const totRows = estacionesBiciKeys.length
+            ? await bicicletasModels.findAll({
+                  attributes: [
+                      [sequelize.col("bic_estacion"), "estacion_id"],
+                      [sequelize.fn("COUNT", sequelize.col("bic_id")), "bicicletas_total"],
+                  ],
+                  where: {
+                      bic_estacion: { [Op.in]: estacionesBiciKeys },
+                  },
+                  group: ["bic_estacion"],
+                  raw: true,
+              })
+            : [];
+
+        const totMap = new Map();
+        for (const t of totRows || []) {
+            totMap.set(String(t.estacion_id), Number(t.bicicletas_total || 0));
+        }
+
+        if (auditEnabled) {
+            console.log("[getProductividadOperarios][audit][bicicletas_disponibles]", {
+                requestId,
+                estacionesBiciKeys_len: estacionesBiciKeys.length,
+                dispRows_len: Array.isArray(dispRows) ? dispRows.length : null,
+                dispRows_sample: Array.isArray(dispRows) ? dispRows.slice(0, 10) : null,
+                totRows_len: Array.isArray(totRows) ? totRows.length : null,
+                totRows_sample: Array.isArray(totRows) ? totRows.slice(0, 10) : null,
+                dispMap_keys_sample: Array.from(dispMap.keys()).slice(0, 20),
+                totMap_keys_sample: Array.from(totMap.keys()).slice(0, 20),
+            });
+        }
+
+        const rows = (mantenimientosAgg || []).map((r) => {
+            const estacionStr = String(r.estacion_id).trim();
+            const estacionBiciKey = /^\d+$/.test(estacionStr)
+                ? (estacionIdToNombre.get(Number(estacionStr)) ? String(estacionIdToNombre.get(Number(estacionStr))) : estacionStr)
+                : estacionStr;
+
+            const bicicletasDisponibles = dispMap.get(String(estacionBiciKey)) || 0;
+            const bicicletasTotal = totMap.get(String(estacionBiciKey)) || 0;
+            const bicicletasRevisadas = Number(r.bicicletas_revisadas || 0);
+            const adicionalesNoDisponibles = Number(r.bicicletas_no_disponibles_revisadas || 0);
+
+            const bicicletasRequeridas = bicicletasTotal;
+            const productividad =
+                bicicletasRequeridas > 0
+                    ? Number(((bicicletasRevisadas / bicicletasRequeridas) * 100).toFixed(2))
+                    : null;
+
+            return {
+                fecha: r.fecha,
+                dia_semana: null,
+                operario_id: r.operario_id,
+                estacion_id: r.estacion_id,
+                empresa_id: r.empresa_id,
+                bicicletas_disponibles: bicicletasDisponibles,
+                bicicletas_total: bicicletasTotal,
+                bicicletas_revisadas: bicicletasRevisadas,
+                bicicletas_no_disponibles_revisadas: adicionalesNoDisponibles,
+                bicicletas_requeridas: bicicletasRequeridas,
+                productividad,
+                _debug: auditEnabled
+                    ? {
+                        estacion_id_raw: r.estacion_id,
+                        estacion_bici_key: estacionBiciKey,
+                        disp_lookup: dispMap.get(String(estacionBiciKey)) || 0,
+                        total_lookup: totMap.get(String(estacionBiciKey)) || 0,
+                        formula:
+                            "requeridas = total_bicicletas_en_estacion; productividad = (revisadas / requeridas) * 100",
+                    }
+                    : undefined,
+            };
+        });
+
+        const resumenMap = new Map();
+        for (const r of rows) {
+            const key = `${r.operario_id}__${r.empresa_id || ""}`;
+            if (!resumenMap.has(key)) {
+                resumenMap.set(key, {
+                    operario_id: r.operario_id,
+                    empresa_id: r.empresa_id,
+                    total_requeridas: 0,
+                    total_revisadas: 0,
+                });
+            }
+            const acc = resumenMap.get(key);
+            acc.total_requeridas += Number(r.bicicletas_requeridas || 0);
+            acc.total_revisadas += Number(r.bicicletas_revisadas || 0);
+        }
+
+        const resumen = Array.from(resumenMap.values()).map((x) => {
+            const productividad_total =
+                x.total_requeridas > 0
+                    ? ((x.total_revisadas / x.total_requeridas) * 100).toFixed(2)
+                    : null;
+            return { ...x, productividad_total };
+        });
+
+        let debug_detalle = null;
+        if (auditEnabled) {
+            const ejemplos = (rows || []).slice(0, 2);
+            debug_detalle = [];
+
+            for (const ej of ejemplos) {
+                const estacionKey =
+                    ej && ej._debug && ej._debug.estacion_bici_key
+                        ? String(ej._debug.estacion_bici_key)
+                        : String(ej.estacion_id);
+
+                const bicicletasPorEstado = await bicicletasModels.findAll({
+                    attributes: [
+                        [sequelize.fn("UPPER", sequelize.col("bic_estado")), "estado"],
+                        [sequelize.fn("COUNT", sequelize.col("bic_id")), "count"],
+                    ],
+                    where: { bic_estacion: String(estacionKey) },
+                    group: [sequelize.fn("UPPER", sequelize.col("bic_estado"))],
+                    raw: true,
+                });
+
+                const mantenimientosPorEstado = await mantenimientoModels.findAll({
+                    attributes: [
+                        "estado",
+                        [sequelize.fn("COUNT", sequelize.col("id")), "count"],
+                        [
+                            sequelize.fn(
+                                "COUNT",
+                                sequelize.fn(
+                                    "DISTINCT",
+                                    sequelize.col("bc_mantenimientos.bicicleta_id"),
+                                ),
+                            ),
+                            "distinct_bicicletas",
+                        ],
+                    ],
+                    where: {
+                        operario_id: ej.operario_id,
+                        empresa_id: ej.empresa_id,
+                        [Op.and]: [
+                            sequelize.where(fechaCreacionLocalDate, {
+                                [Op.eq]: ej.fecha,
+                            }),
+                        ],
+                    },
+                    group: ["estado"],
+                    raw: true,
+                });
+
+                debug_detalle.push({
+                    visita: {
+                        fecha: ej.fecha,
+                        operario_id: ej.operario_id,
+                        estacion_id: ej.estacion_id,
+                        estacion_bici_key: estacionKey,
+                        empresa_id: ej.empresa_id,
+                    },
+                    insumos: {
+                        bicicletas_por_estado: bicicletasPorEstado || [],
+                        mantenimientos_por_estado: mantenimientosPorEstado || [],
+                    },
+                    calculo_resultado: {
+                        disponibles: Number(ej.bicicletas_disponibles || 0),
+                        total: Number(ej.bicicletas_total || 0),
+                        no_disponibles_revisadas: Number(ej.bicicletas_no_disponibles_revisadas || 0),
+                        requeridas: Number(ej.bicicletas_requeridas || 0),
+                        revisadas: Number(ej.bicicletas_revisadas || 0),
+                        productividad: ej.productividad,
+                        regla:
+                            "requeridas = total_bicicletas_en_estacion; productividad = (revisadas / requeridas) * 100",
+                    },
+                    flags: {
+                        solo_finalizados: !!soloFinalizados,
+                        debug_detalle: true,
+                    },
+                });
+            }
+
+            console.log(
+                "[getProductividadOperarios][verificacion]",
+                JSON.stringify(
+                    {
+                        requestId,
+                        params: {
+                            fecha_inicio,
+                            fecha_fin,
+                            empresa_id,
+                            estacion_id,
+                            operario_id,
+                            solo_finalizados: !!soloFinalizados,
+                        },
+                        ejemplos: debug_detalle,
+                    },
+                    null,
+                    2,
+                ),
+            );
+        }
+
+        return res.send({
+            data: {
+                periodo: { inicio: fecha_inicio, fin: fecha_fin },
+                debug_detalle_flag: debugDetalle ? 1 : null,
+                solo_finalizados: soloFinalizados ? 1 : null,
+                rows,
+                resumen,
+                debug_detalle,
+            },
+        });
+    } catch (error) {
+        console.error("Error al obtener productividad:", error);
+        handleHttpError(res, "ERROR_GET_PRODUCTIVIDAD_OPERARIOS");
+    } finally {
+        const elapsedMs = Date.now() - startedAt;
+        const audit =
+            (req &&
+                req.query &&
+                req.query.filter &&
+                (() => {
+                    try {
+                        const f = JSON.parse(req.query.filter);
+                        return f && (f.debug_detalle === true || f.debug_detalle === "1" || f.debug_detalle === 1);
+                    } catch (e) {
+                        return false;
+                    }
+                })()) ||
+            (req &&
+                req.query &&
+                (req.query.debug_detalle === true || req.query.debug_detalle === "1" || req.query.debug_detalle === 1)) ||
+            (req &&
+                req.headers &&
+                (req.headers["x-debug-detalle"] === "1" || req.headers["x-debug-detalle"] === 1)) ||
+            (process.env && (process.env.DEBUG_PRODUCTIVIDAD === "1" || process.env.DEBUG_PRODUCTIVIDAD === "true"));
+
+        if (audit) {
+            console.log("[getProductividadOperarios][audit][END]", {
+                requestId,
+                elapsedMs,
+            });
+        }
+    }
+};
+
 module.exports = {
-    getMantenimientos,
-    getMantenimientoPorId,
-    getMantenimientosPorEstacion,
-    getMantenimientosPorEmpresa,
-    getMantenimientosPorBicicleta,
-    crearMantenimiento,
-    actualizarMantenimiento,
-    finalizarMantenimiento,
-    cancelarMantenimiento,
-    getMantenimientosPorOperario,
-    getComponentesConCategorias,
-    crearMantenimientosMasivo,
-    actualizarHistorialComponente,
-    crearHistorialComponente,
-    getEstadisticasOperarios,
-    getRendimientoOperarios,
-    getEstadisticasOperariosByEmpresa,
-    getEstadisticasOperariosByEstacion,
-    getComponentesPorBicicleta,
-    trasladoMasivoMantenimientos,
-    getHistorialMantenimiento,
-    exportMantenimientosPorEmpresa,
-    exportMantenimientosPorEstacion
+  getMantenimientos,
+  getMantenimientoPorId,
+  getMantenimientosPorEstacion,
+  getMantenimientosPorEmpresa,
+  getMantenimientosPorBicicleta,
+  crearMantenimiento,
+  actualizarMantenimiento,
+  finalizarMantenimiento,
+  cancelarMantenimiento,
+  getMantenimientosPorOperario,
+  getComponentesConCategorias,
+  crearMantenimientosMasivo,
+  actualizarHistorialComponente,
+  crearHistorialComponente,
+  getEstadisticasOperarios,
+  getRendimientoOperarios,
+  getProductividadOperarios,
+  getEstadisticasOperariosByEmpresa,
+  getEstadisticasOperariosByEstacion,
+  getComponentesPorBicicleta,
+  trasladoMasivoMantenimientos,
+  getHistorialMantenimiento,
+  exportMantenimientosPorEmpresa,
+  exportMantenimientosPorEstacion,
 };
