@@ -50,9 +50,8 @@ router.post('/', upload.single('image'), async (req, res) => {
         const filePath = path.join(targetDir, fileName);
 
         // Process image with Sharp
-        // We compress it to JPEG format with adjusted quality to ensure it typically falls under 350kb
-        // Resize parameters: max width 1200 or max height 1200 (maintaining aspect ratio)
         if (sharp) {
+            console.log('[UPLOAD] Procesando imagen con Sharp...');
             await sharp(req.file.buffer)
                 .resize({
                     width: 1200,
@@ -60,9 +59,10 @@ router.post('/', upload.single('image'), async (req, res) => {
                     fit: sharp.fit.inside,
                     withoutEnlargement: true
                 })
-                .jpeg({ quality: 80 }) // 80 quality is usually a good balance to stay under 350kb for 1200px images
+                .jpeg({ quality: 60 }) // Reducido a 60 para asegurar menor peso
                 .toFile(filePath);
         } else {
+            console.warn('[UPLOAD] Sharp no está disponible, guardando imagen sin optimizar');
             fs.writeFileSync(filePath, req.file.buffer);
         }
 
