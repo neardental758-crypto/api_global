@@ -59,7 +59,7 @@ router.post('/', upload.single('image'), async (req, res) => {
                     fit: sharp.fit.inside,
                     withoutEnlargement: true
                 })
-                .jpeg({ quality: 75 }) // Reducido a 75 para asegurar menor peso
+                .jpeg({ quality: 60 }) // Reducido a 60 para asegurar menor peso
                 .toFile(filePath);
         } else {
             console.warn('[UPLOAD] Sharp no está disponible, guardando imagen sin optimizar');
