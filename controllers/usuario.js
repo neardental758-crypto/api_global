@@ -111,6 +111,7 @@ const getItem = async (req, res) => {
                 usu_dir_trabajo,
                 usu_img,
                 usu_prueba,
+                usu_recorrido,
                 usu_habilitado
              FROM bc_usuarios
              WHERE usu_documento = :usu_documento
@@ -1036,6 +1037,7 @@ const loginApp = async (req, res) => {
             usu_dir_trabajo: user.usu_dir_trabajo,
             usu_dir_casa: user.usu_dir_casa,
             usu_img: user.usu_img,
+            usu_recorrido: user.usu_recorrido,
             usu_habilitado: user.usu_habilitado,
             organizationId: empresaData ? empresaData.emp_id : null,
             organizationName: user.usu_empresa,
