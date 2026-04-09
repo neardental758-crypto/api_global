@@ -258,12 +258,19 @@ const createItem = async (req, res) => {
         res.send('ok');
     } catch (error) {
         if (transaction) await transaction.rollback();
+        
+        let detail = error.message;
+        if (error.errors && Array.isArray(error.errors)) {
+            detail = error.errors.map(e => `${e.path}: ${e.message}`).join(', ');
+        }
+
         console.error('[ERRO_CREATE_USUARIO] Detalles del error:', {
             message: error.message,
+            detail: detail,
             stack: error.stack,
             body: req.body
         });
-        res.status(500).send(`ERROR_CREATE_ITEM: ${error.message}`);
+        res.status(500).send(`ERROR_CREATE_ITEM: ${detail}`);
     }
 };
 
