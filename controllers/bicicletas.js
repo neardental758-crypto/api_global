@@ -64,13 +64,16 @@ const getItemEstacion = async (req, res) => {
     try {
         req = matchedData(req);
         const { bic_estacion } = req;
-        const data = await bicicletasModels.findAll({ 
+        console.log("[bc_bicicletas][getItemEstacion] bic_estacion:", bic_estacion);
+
+        const data = await bicicletasModels.findAll({
             where: { bic_estacion: bic_estacion },
-            include: [{
-                model: Estacion,
-                where: { est_estacion: bic_estacion }
-            }]
         });
+
+        console.log(
+            "[bc_bicicletas][getItemEstacion] returned:",
+            Array.isArray(data) ? data.length : 0,
+        );
         res.send({ data });
     } catch (e) {
         httpError(res, "ERROR_GET_BICI_ESTACION_NOMBRE");

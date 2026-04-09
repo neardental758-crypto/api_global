@@ -794,12 +794,23 @@ const getItemsForReportsByOrganization = async (req, res) => {
 
     const loans = await prestamosModels.findAll(queryOptions);
 
-    const filteredLoans = loans.filter(loan => {
-      const empresaUsuario = loan.bc_usuario && loan.bc_usuario.bc_empresa && loan.bc_usuario.bc_empresa.emp_nombre;
-      const empresaEstacion = loan.bc_estacione && loan.bc_estacione.est_empresa;
+    const filteredLoans = loans.filter((loan) => {
+      const empresaUsuarioRaw =
+        (loan.bc_usuario &&
+          loan.bc_usuario.bc_empresa &&
+          loan.bc_usuario.bc_empresa.emp_nombre) ||
+        (loan.bc_usuario && loan.bc_usuario.usu_empresa) ||
+        null;
+
+      const empresaEstacionRaw = loan.bc_estacione && loan.bc_estacione.est_empresa;
+
+      const empresaUsuario =
+        typeof empresaUsuarioRaw === "string" ? empresaUsuarioRaw.trim() : empresaUsuarioRaw;
+      const empresaEstacion =
+        typeof empresaEstacionRaw === "string" ? empresaEstacionRaw.trim() : empresaEstacionRaw;
 
       if (!loan.bc_estacione || !empresaEstacion) return true;
-      if (empresaEstacion === empresaUsuario) return true;
+      if (empresaUsuario && empresaEstacion === empresaUsuario) return true;
 
       return false;
     });
@@ -917,14 +928,22 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
     const loans = await prestamosModels.findAll(queryOptions);
 
     const filteredLoans = loans.filter((loan) => {
+      const empresaUsuarioRaw =
+        (loan.bc_usuario &&
+          loan.bc_usuario.bc_empresa &&
+          loan.bc_usuario.bc_empresa.emp_nombre) ||
+        (loan.bc_usuario && loan.bc_usuario.usu_empresa) ||
+        null;
+
+      const empresaEstacionRaw = loan.bc_estacione && loan.bc_estacione.est_empresa;
+
       const empresaUsuario =
-        loan.bc_usuario &&
-        loan.bc_usuario.bc_empresa &&
-        loan.bc_usuario.bc_empresa.emp_nombre;
-      const empresaEstacion = loan.bc_estacione && loan.bc_estacione.est_empresa;
+        typeof empresaUsuarioRaw === "string" ? empresaUsuarioRaw.trim() : empresaUsuarioRaw;
+      const empresaEstacion =
+        typeof empresaEstacionRaw === "string" ? empresaEstacionRaw.trim() : empresaEstacionRaw;
 
       if (!loan.bc_estacione || !empresaEstacion) return true;
-      if (empresaEstacion === empresaUsuario) return true;
+      if (empresaUsuario && empresaEstacion === empresaUsuario) return true;
 
       return false;
     });

@@ -122,25 +122,29 @@ const getComentariosPorEmpresaEstacion = async (req, res) => {
         }
         
         const offset = (page - 1) * limit;
-        
-        let bicicletasIds = [];
-        
+
+        const includePrestamo = {
+            model: Prestamos,
+            attributes: ['pre_id', 'pre_bicicleta', 'pre_retiro_fecha'],
+            required: true,
+            include: [
+                {
+                    model: Bicicleta,
+                    attributes: ['bic_id', 'bic_numero', 'bic_estacion'],
+                    required: true,
+                    where: {}
+                }
+            ]
+        };
+
+        // Filtro por número de bicicleta (texto)
+        if (bicicletaFiltro) {
+            includePrestamo.include[0].where.bic_numero = { [Op.like]: `%${bicicletaFiltro}%` };
+        }
+
+        // Filtro por estación o por empresa (sin construir IN gigante de IDs)
         if (estacion_id && estacion_id !== 'undefined') {
-            let query = `SELECT bic_id FROM bc_bicicletas WHERE bic_estacion = :estacion_id`;
-            const replacements = { estacion_id };
-            
-            if (bicicletaFiltro) {
-                query += ` AND bic_numero LIKE :bicicletaFiltro`;
-                replacements.bicicletaFiltro = `%${bicicletaFiltro}%`;
-            }
-            
-            const bicicletas = await sequelize.query(query, {
-                replacements,
-                type: sequelize.QueryTypes.SELECT
-            });
-            
-            bicicletasIds = bicicletas.map(b => b.bic_id);
-            
+            includePrestamo.include[0].where.bic_estacion = estacion_id;
         } else {
             const empresa = await sequelize.query(
                 `SELECT emp_nombre FROM bc_empresas WHERE emp_id = :empresa_id`,
@@ -149,60 +153,26 @@ const getComentariosPorEmpresaEstacion = async (req, res) => {
                     type: sequelize.QueryTypes.SELECT
                 }
             );
-            
-            if (empresa.length === 0) {
+
+            if (!empresa || empresa.length === 0) {
                 return res.send({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
             }
-            
+
             const empresaNombre = empresa[0].emp_nombre;
-            
-            const estaciones = await sequelize.query(
-                `SELECT est_estacion FROM bc_estaciones WHERE est_empresa = :empresaNombre`,
-                {
-                    replacements: { empresaNombre },
-                    type: sequelize.QueryTypes.SELECT
-                }
-            );
-            
-            const estacionesIds = estaciones.map(e => e.est_estacion);
-            
-            if (estacionesIds.length === 0) {
-                return res.send({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
-            }
-            
-            let query = `SELECT bic_id FROM bc_bicicletas WHERE bic_estacion IN (:estacionesIds)`;
-            const replacements = { estacionesIds };
-            
-            if (bicicletaFiltro) {
-                query += ` AND bic_numero LIKE :bicicletaFiltro`;
-                replacements.bicicletaFiltro = `%${bicicletaFiltro}%`;
-            }
-            
-            const bicicletas = await sequelize.query(query, {
-                replacements,
-                type: sequelize.QueryTypes.SELECT
-            });
-            
-            bicicletasIds = bicicletas.map(b => b.bic_id);
-        }
-        
-        if (bicicletasIds.length === 0) {
-            return res.send({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+
+            // Subquery: estaciones de la empresa
+            // (evita traer la lista completa a Node y evita IN enorme en el log)
+            includePrestamo.include[0].where.bic_estacion = {
+                [Op.in]: sequelize.literal(
+                    `(SELECT est_estacion FROM bc_estaciones WHERE est_empresa = ${sequelize.escape(empresaNombre)})`
+                )
+            };
         }
 
         const { count, rows } = await comentariosModels.findAndCountAll({
             where: {},
             include: [
-                {
-                    model: Prestamos,
-                    attributes: ['pre_id', 'pre_bicicleta', 'pre_retiro_fecha'],
-                    where: { pre_bicicleta: { [Op.in]: bicicletasIds } },
-                    required: true,
-                    include: [{
-                        model: Bicicleta,
-                        attributes: ['bic_id', 'bic_numero', 'bic_estacion']
-                    }]
-                },
+                includePrestamo,
                 {
                     model: Usuario,
                     attributes: ['usu_documento', 'usu_nombre']
