@@ -257,8 +257,12 @@ const createItem = async (req, res) => {
         console.log('[REGISTRO] Usuario creado exitosamente en MySQL:', usu_documento);
         res.send('ok');
     } catch (error) {
-        await transaction.rollback();
-        console.error('Error detallado al crear usuario:', error);
+        if (transaction) await transaction.rollback();
+        console.error('[ERRO_CREATE_USUARIO] Detalles del error:', {
+            message: error.message,
+            stack: error.stack,
+            body: req.body
+        });
         res.status(500).send(`ERROR_CREATE_ITEM: ${error.message}`);
     }
 };
