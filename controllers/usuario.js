@@ -131,7 +131,14 @@ const getItem = async (req, res) => {
             dataRegisterExtended = null;
         }
 
-        res.send({ data, dataRegisterExtended });
+        let dataRol = null;
+        try {
+            dataRol = await UsuarioRol.findOne({ where: { ur_usuario_id: usu_documento } });
+        } catch (err) {
+            dataRol = null;
+        }
+
+        res.send({ data, dataRegisterExtended, dataRol });
     } catch (e) {
         console.error('ERROR_GET_USER getItem', { usu_documento: req?.usu_documento, error: e });
         httpError(res, `ERROR_GET_USER`)
@@ -244,6 +251,9 @@ const createItem = async (req, res) => {
         await usuarioModels.create(userData, { transaction });
 
         // 4. Crear rol de usuario en bc_usuarios_roles
+        // Limpiamos cualquier rol huérfano previo para evitar errores de llave única
+        await UsuarioRol.destroy({ where: { ur_usuario_id: usu_documento }, transaction });
+        
         const rolData = {
             ur_id: randomUUID(),
             ur_usuario_id: usu_documento,
