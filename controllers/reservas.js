@@ -237,14 +237,14 @@ const temporizador = async (req, res) => {
   try {
     const { duracion, bici, res_usuario } = req.body;
 
-    console.log(`⏳ Temporizador iniciado para reserva del usuario ${res_usuario}, con duración: ${duracion} minutos y la bicicleta ${bici}`);
+    console.log(`⏳ Temporizador iniciado (Opción en Memoria) para reserva del usuario ${res_usuario}, con duración: ${duracion} minutos y la bicicleta ${bici}`);
 
     // Enviar respuesta inmediata para no mantener esperando al frontend
-    res.send({ ok: true, message: "Temporizador iniciado" });
+    res.send({ ok: true, message: "Temporizador iniciado (Opción redundante)" });
 
     const minutosDuracion = parseInt(duracion, 10);
 
-    // Ejecutar cancelación automática tras el tiempo indicado
+    // Ejecutar cancelación automática tras el tiempo indicado (Primera línea de defensa, redundante con el CRON)
     setTimeout(async () => {
       try {
         // Verificar si la reserva sigue activa antes de cancelar
@@ -253,7 +253,7 @@ const temporizador = async (req, res) => {
             res_estado: 'ACTIVA'
         }});
 
-        console.log(`⏰ Verificando reserva para cancelación automática...`, reserva);
+        console.log(`⏰ [setTimeout] Verificando reserva para cancelación automática en memoria...`);
 
         if (reserva) {
           await reservasModels.update(
@@ -265,25 +265,25 @@ const temporizador = async (req, res) => {
                 }
             }
           );
-          console.log(`❌ Reserva de usuario ${res_usuario} cancelada automáticamente por tiempo expirado`);
+          console.log(`❌ [setTimeout] Reserva de usuario ${res_usuario} cancelada automáticamente por tiempo expirado en memoria.`);
 
-          await Bicicleta.update(
+          await bicicletasModels.update(
             { bic_estado: 'DISPONIBLE' },
             { where: { bic_id: bici }}
           );
-          console.log(`❌ La bicicleta ${bici} está disponible nuevamente tras la cancelación de la reserva`);
+          console.log(`❌ [setTimeout] La bicicleta ${bici} está disponible mediante cancelación en memoria.`);
 
         } else {
-          console.log(`✅ Reserva de usuriopa ${res_usuario} ya no estaba activa al momento del timeout`);
+          console.log(`✅ [setTimeout] Reserva de usuario ${res_usuario} ya no estaba activa (cancelada por el usuario o por el CRON).`);
         }
 
       } catch (err) {
-        console.error("❗ Error al cancelar reserva en temporizador:", err);
+        console.error("❗ [setTimeout] Error al cancelar reserva en temporizador:", err);
       }
     }, minutosDuracion * 60 * 1000); // convertir a milisegundos
 
   } catch (error) {
-    console.error("❗ ERROR en temporizador:", error);
+    console.error("❗ ERROR en endpoint temporizador:", error);
     httpError(res, "ERROR_TEMPORIZADOR");
   }
 };

@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const SesionUsuario = require('../models/mysql/sesionUsuario');
-const { agendamientoOperarioModels, agendamientoIncumplidoModels, estacionModels, mantenimientoModels } = require('../models');
+const { agendamientoOperarioModels, agendamientoIncumplidoModels, estacionModels, mantenimientoModels, reservasModels, bicicletasModels } = require('../models');
 const { Op } = require('sequelize');
 
 const startSessionCleanup = () => {
@@ -140,4 +140,53 @@ const startAgendamientosCleanup = () => {
   cron.schedule('0 1 * * *', verificarIncumplimientosAgendamientos);
 };
 
-module.exports = { startSessionCleanup, startAgendamientosCleanup, verificarIncumplimientosAgendamientos };
+const startReservationsCleanup = () => {
+  cron.schedule('* * * * *', async () => {
+    try {
+      const reservas = await reservasModels.findAll({ where: { res_estado: 'ACTIVA' } });
+      
+      const ahoraUTC = new Date();
+      // Ajustamos a la zona horaria en la que parece operar la app internamente (-5 horas)
+      const ahoraBogota = new Date(ahoraUTC.getTime() - (5 * 60 * 60 * 1000));
+
+      for (const res of reservas) {
+        if (!res.res_fecha_fin || !res.res_hora_fin) continue;
+
+        const [año, mes, dia] = res.res_fecha_fin.split('-');
+        let partesHora = res.res_hora_fin.split(':');
+        const hora = partesHora[0];
+        const min = partesHora[1];
+        const seg = partesHora.length > 2 ? partesHora[2] : 0;
+        
+        const reservaTime = Date.UTC(año, parseInt(mes) - 1, dia, hora, min, seg);
+        const currentTime = Date.UTC(
+            ahoraBogota.getUTCFullYear(),
+            ahoraBogota.getUTCMonth(),
+            ahoraBogota.getUTCDate(),
+            ahoraBogota.getUTCHours(),
+            ahoraBogota.getUTCMinutes(),
+            ahoraBogota.getUTCSeconds()
+        );
+
+        if (currentTime >= reservaTime) {
+          await reservasModels.update(
+            { res_estado: 'CANCELADA' },
+            { where: { res_id: res.res_id, res_estado: 'ACTIVA' } }
+          );
+          
+          if (res.res_bicicleta) {
+            await bicicletasModels.update(
+              { bic_estado: 'DISPONIBLE' },
+              { where: { bic_id: res.res_bicicleta } }
+            );
+          }
+          console.log(`❌ Reserva ${res.res_id} cancelada automáticamente por tiempo expirado (CRON)`);
+        }
+      }
+    } catch (error) {
+      console.error('Error en cron de reservas:', error);
+    }
+  });
+};
+
+module.exports = { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup, verificarIncumplimientosAgendamientos };

@@ -9,7 +9,7 @@ const cors = require('cors');
 const { dbConnectMysql } = require('./config/mysql');
 const app = express();
 const cron = require('./cron');
-const { startSessionCleanup, startAgendamientosCleanup } = require('./utils/cronJobs');
+const { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup } = require('./utils/cronJobs');
 const path = require('path');
 
 app.use(cors());
@@ -22,6 +22,7 @@ const port = process.env.API_PORT || process.env.PORT || 3002;
 cron;
 startSessionCleanup();
 startAgendamientosCleanup();
+startReservationsCleanup();
 
 //RUTAS
 app.use("/api", require("./routes/"));
