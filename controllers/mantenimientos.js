@@ -4,7 +4,7 @@ const { bicicletasModels, componenteModels, estadoComponenteModels, historialMan
 const { matchedData } = require("express-validator");
 const { mantenimientoModels } = require("../models");
 const { usuarioModels } = require("../models");
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const { handleHttpError } = require("../utils/handleError");
 
 /**
@@ -605,6 +605,7 @@ const crearMantenimientosMasivo = async (req, res) => {
       handleHttpError(res, "ERROR_CREAR_MANTENIMIENTOS_MASIVO");
     }
 };
+
 const actualizarHistorialComponente = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
@@ -721,16 +722,16 @@ const crearHistorialComponente = async (req, res) => {
       res.status(201).send({ data: historialCompleto });
     } catch (error) {
       await transaction.rollback();
+
       console.error("Error al crear historial de componente:", error);
       handleHttpError(res, "ERROR_CREAR_HISTORIAL_COMPONENTE");
     }
   };
 
-
 const getEstadisticasOperarios = async (req, res) => {
   try {
     let params = req.query;
-    
+
     if (req.query.filter) {
       try {
         params = JSON.parse(req.query.filter);
@@ -738,45 +739,39 @@ const getEstadisticasOperarios = async (req, res) => {
         console.error("Error al parsear filtros:", e);
       }
     }
-    
+
     const { empresa_id, estacion_id, fecha_inicio, fecha_fin, operario_id } = params;
-    
-    // Definir la zona horaria local (Colombia es UTC-5)
-    const zonaHoraria = '-05:00';
-    
-    let whereConditions = '';
+
+    const zonaHoraria = "-05:00";
+
+    let whereConditions = "";
     const replacements = {};
-    
+
     if (empresa_id) {
-      whereConditions += ' AND m.empresa_id = :empresa_id';
+      whereConditions += " AND m.empresa_id = :empresa_id";
       replacements.empresa_id = empresa_id;
     }
-    
+
     if (estacion_id) {
-      whereConditions += ' AND m.estacion_id = :estacion_id';
+      whereConditions += " AND m.estacion_id = :estacion_id";
       replacements.estacion_id = estacion_id;
     }
-    
-    // SOLUCIÓN FINAL PARA EL RANGO DE FECHAS
+
     if (fecha_inicio && fecha_fin) {
-      // Si hay ambas fechas, usar el rango completo
       whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) >= :fecha_inicio`;
       whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) <= :fecha_fin`;
       replacements.fecha_inicio = fecha_inicio;
       replacements.fecha_fin = fecha_fin;
     } else if (fecha_inicio) {
-      // Si solo hay fecha de inicio, traer desde esa fecha hasta hoy
-      const fechaActual = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
       whereConditions += ` AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '${zonaHoraria}')) >= :fecha_inicio`;
       replacements.fecha_inicio = fecha_inicio;
     }
-    
+
     if (operario_id) {
-      whereConditions += ' AND m.operario_id = :operario_id';
+      whereConditions += " AND m.operario_id = :operario_id";
       replacements.operario_id = operario_id;
     }
-    
-    // Consulta principal con agrupación por operario y ajuste de zona horaria
+
     const query = `
       SELECT 
         u.usu_documento AS operario_id,
@@ -785,27 +780,165 @@ const getEstadisticasOperarios = async (req, res) => {
         SUM(CASE WHEN m.estado = 'finalizado' THEN 1 ELSE 0 END) AS mantenimientos_finalizados,
         SUM(CASE WHEN m.estado = 'en_proceso' THEN 1 ELSE 0 END) AS mantenimientos_en_proceso,
         SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
-        AVG(CASE WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+        AVG(CASE 
+          WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
           THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
-          ELSE NULL END) AS tiempo_promedio_horas,
+          ELSE NULL 
+        END) AS tiempo_promedio_horas,
         COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
         GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids,
-        GROUP_CONCAT(DISTINCT m.empresa_id) AS empresas_ids
+        GROUP_CONCAT(DISTINCT m.empresa_id) AS empresas_ids,
+        ec.empresas_conteo AS empresas_conteo
       FROM bc_mantenimientos m
       JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+      LEFT JOIN (
+        SELECT 
+          x.operario_id,
+          GROUP_CONCAT(CONCAT(x.empresa_id, ':', x.cnt) SEPARATOR ',') AS empresas_conteo
+        FROM (
+          SELECT 
+            m2.operario_id,
+            m2.empresa_id,
+            COUNT(m2.id) AS cnt
+          FROM bc_mantenimientos m2
+          WHERE 1=1 ${whereConditions}
+          GROUP BY m2.operario_id, m2.empresa_id
+        ) x
+        GROUP BY x.operario_id
+      ) ec ON ec.operario_id = u.usu_documento
       WHERE 1=1 ${whereConditions}
-      GROUP BY u.usu_documento, u.usu_nombre
+      GROUP BY u.usu_documento, u.usu_nombre, ec.empresas_conteo
       HAVING total_mantenimientos > 0
     `;
-    
-    
-    const estadisticas = await sequelize.query(query, { 
+
+    const estadisticas = await sequelize.query(query, {
       replacements,
-      type: sequelize.QueryTypes.SELECT 
+      type: sequelize.QueryTypes.SELECT,
     });
-    
-    
-    res.send({ data: estadisticas });
+
+    const estadisticasConEstaciones = estadisticas.map((item) => {
+      item.estaciones_ids = item.estaciones_ids ? item.estaciones_ids.split(",") : [];
+      item.empresas_ids = item.empresas_ids ? String(item.empresas_ids) : "";
+      item.empresas_conteo = item.empresas_conteo ? String(item.empresas_conteo) : "";
+
+      item.eficiencia =
+        item.total_mantenimientos > 0
+          ? ((item.mantenimientos_finalizados / item.total_mantenimientos) * 100).toFixed(2)
+          : "0.00";
+
+      return item;
+    });
+
+    const empresasSet = new Set();
+    const estacionesSet = new Set();
+
+    (estadisticasConEstaciones || []).forEach((it) => {
+      const empresasRaw = it && it.empresas_ids ? String(it.empresas_ids) : "";
+      const empresasIds = empresasRaw
+        ? empresasRaw
+            .split(",")
+            .map((x) => String(x).trim())
+            .filter((x) => x !== "")
+        : [];
+      empresasIds.forEach((x) => empresasSet.add(x));
+
+      const empresasConteoRaw = it && it.empresas_conteo ? String(it.empresas_conteo) : "";
+      const empresasConteo = empresasConteoRaw
+        ? empresasConteoRaw
+            .split(",")
+            .map((p) => String(p).trim())
+            .filter((p) => p !== "")
+        : [];
+      empresasConteo.forEach((pair) => {
+        const idx = pair.indexOf(":");
+        if (idx <= 0) return;
+        const k = String(pair.substring(0, idx)).trim();
+        if (k) empresasSet.add(k);
+      });
+
+      const estacionesIds = Array.isArray(it && it.estaciones_ids) ? it.estaciones_ids : [];
+      estacionesIds
+        .map((x) => String(x).trim())
+        .filter((x) => x !== "")
+        .forEach((x) => estacionesSet.add(x));
+    });
+
+    const empresasIdsUnique = Array.from(empresasSet);
+    const estacionesIdsUnique = Array.from(estacionesSet);
+
+    let empresasCatalogo = [];
+    let estacionesCatalogo = [];
+
+    if (empresasIdsUnique.length > 0) {
+      empresasCatalogo = await sequelize.query(
+        `SELECT emp_id AS id, emp_nombre AS nombre
+         FROM bc_empresas
+         WHERE emp_id IN (:empresaKeys) OR emp_nombre IN (:empresaKeys)` ,
+        {
+          replacements: { empresaKeys: empresasIdsUnique },
+          type: QueryTypes.SELECT,
+        },
+      );
+    }
+
+    if (estacionesIdsUnique.length > 0) {
+      estacionesCatalogo = await sequelize.query(
+        `SELECT est_id AS id, est_estacion AS nombre FROM bc_estaciones WHERE est_id IN (:estacionIds)` ,
+        {
+          replacements: { estacionIds: estacionesIdsUnique },
+          type: QueryTypes.SELECT,
+        },
+      );
+    }
+
+    const empresasMap = new Map();
+    (empresasCatalogo || []).forEach((e) => {
+      if (!e) return;
+      const idKey = e.id === null || e.id === undefined ? "" : String(e.id);
+      const nombreKey = e.nombre === null || e.nombre === undefined ? "" : String(e.nombre);
+      if (idKey) empresasMap.set(idKey, e);
+      if (nombreKey) empresasMap.set(nombreKey, e);
+    });
+
+    const estacionesMap = new Map((estacionesCatalogo || []).map((s) => [String(s.id), s]));
+
+    const dataFinal = (estadisticasConEstaciones || []).map((it) => {
+      const empresasRaw = it && it.empresas_ids ? String(it.empresas_ids) : "";
+      const empresasIds = empresasRaw
+        ? empresasRaw
+            .split(",")
+            .map((x) => String(x).trim())
+            .filter((x) => x !== "")
+        : [];
+      const estacionesIds = Array.isArray(it && it.estaciones_ids) ? it.estaciones_ids : [];
+
+      const empresasDetalle = empresasIds.map((id) => {
+        const found = empresasMap.get(String(id));
+        return {
+          id: String(id),
+          nombre: found && found.nombre ? String(found.nombre) : null,
+        };
+      });
+
+      const estacionesDetalle = estacionesIds
+        .map((x) => String(x).trim())
+        .filter((x) => x !== "")
+        .map((id) => {
+          const found = estacionesMap.get(String(id));
+          return {
+            id: String(id),
+            nombre: found && found.nombre ? String(found.nombre) : null,
+          };
+        });
+
+      return {
+        ...it,
+        empresas_detalle: empresasDetalle,
+        estaciones_detalle: estacionesDetalle,
+      };
+    });
+
+    res.send({ data: dataFinal });
   } catch (error) {
     console.error("ERROR:", error);
     res.status(500).send({ error: "ERROR_GET_ESTADISTICAS_OPERARIOS" });
@@ -813,33 +946,31 @@ const getEstadisticasOperarios = async (req, res) => {
 };
 
 const getRendimientoOperarios = async (req, res) => {
-    try {
-        // Obtener parámetros de query o body según el método HTTP
-        const params = req.method === 'POST' ? req.body : req.query;
-        
-        const { fecha_inicio, fecha_fin, empresa_id, estacion_id } = params;
-        
-        if (!fecha_inicio || !fecha_fin) {
-            return handleHttpError(res, "FECHAS_REQUERIDAS", 400);
-        }
-        
-        let whereConditions = '';
-        const replacements = {
-            fecha_inicio: `${fecha_inicio} 00:00:00`, 
-            fecha_fin: `${fecha_fin} 23:59:59`
-        };
-        
-        if (empresa_id) {
-            whereConditions += ' AND m.empresa_id = :empresa_id';
-            replacements.empresa_id = empresa_id;
-        }
-        
-        if (estacion_id) {
-            whereConditions += ' AND m.estacion_id = :estacion_id';
-            replacements.estacion_id = estacion_id;
-        }
-        
-        const query = `
+  try {
+    const params = req.method === 'POST' ? req.body : req.query;
+    const { fecha_inicio, fecha_fin, empresa_id, estacion_id } = params;
+
+    if (!fecha_inicio || !fecha_fin) {
+      return handleHttpError(res, "FECHAS_REQUERIDAS", 400);
+    }
+
+    let whereConditions = '';
+    const replacements = {
+      fecha_inicio: `${fecha_inicio} 00:00:00`,
+      fecha_fin: `${fecha_fin} 23:59:59`,
+    };
+
+    if (empresa_id) {
+      whereConditions += ' AND m.empresa_id = :empresa_id';
+      replacements.empresa_id = empresa_id;
+    }
+
+    if (estacion_id) {
+      whereConditions += ' AND m.estacion_id = :estacion_id';
+      replacements.estacion_id = estacion_id;
+    }
+
+    const query = `
             SELECT 
                 u.usu_documento AS operario_id,
                 u.usu_nombre AS nombre_operario,
@@ -862,41 +993,40 @@ const getRendimientoOperarios = async (req, res) => {
             HAVING total_mantenimientos > 0
             ORDER BY mantenimientos_finalizados DESC
         `;
-        
-        const rendimiento = await sequelize.query(query, { 
-            replacements: replacements,
-            type: sequelize.QueryTypes.SELECT 
-        });
-        
-        const rendimientoConFormato = rendimiento.map(op => {
-            op.estaciones_ids = op.estaciones_ids ? op.estaciones_ids.split(',') : [];
-            op.empresas_ids = op.empresas_ids ? op.empresas_ids.split(',') : [];
-            
-            // Asignar empresa_id si fue filtrado
-            if (empresa_id) {
-                op.empresa_id = empresa_id;
-            } else if (op.empresas_ids && op.empresas_ids.length === 1) {
-                op.empresa_id = op.empresas_ids[0];
-            }
-            
-            // Calcular eficiencia
-            op.eficiencia = op.total_mantenimientos > 0 
-                ? ((op.mantenimientos_finalizados / op.total_mantenimientos) * 100).toFixed(2) 
-                : "0.00";
-                
-            return op;
-        });
-        
-        res.send({ 
-            data: {
-                periodo: { inicio: fecha_inicio, fin: fecha_fin },
-                rendimiento: rendimientoConFormato
-            } 
-        });
-    } catch (error) {
-        console.error("Error al obtener rendimiento:", error);
-        handleHttpError(res, "ERROR_GET_RENDIMIENTO_OPERARIOS");
-    }
+
+    const rendimiento = await sequelize.query(query, {
+      replacements: replacements,
+      type: sequelize.QueryTypes.SELECT,
+    });
+
+    const rendimientoConFormato = rendimiento.map((op) => {
+      op.estaciones_ids = op.estaciones_ids ? op.estaciones_ids.split(',') : [];
+      op.empresas_ids = op.empresas_ids ? op.empresas_ids.split(',') : [];
+
+      if (empresa_id) {
+        op.empresa_id = empresa_id;
+      } else if (op.empresas_ids && op.empresas_ids.length === 1) {
+        op.empresa_id = op.empresas_ids[0];
+      }
+
+      op.eficiencia =
+        op.total_mantenimientos > 0
+          ? ((op.mantenimientos_finalizados / op.total_mantenimientos) * 100).toFixed(2)
+          : "0.00";
+
+      return op;
+    });
+
+    res.send({
+      data: {
+        periodo: { inicio: fecha_inicio, fin: fecha_fin },
+        rendimiento: rendimientoConFormato,
+      },
+    });
+  } catch (error) {
+    console.error("Error al obtener rendimiento:", error);
+    handleHttpError(res, "ERROR_GET_RENDIMIENTO_OPERARIOS");
+  }
 };
 
 const getEstadisticasOperariosByEmpresa = async (req, res) => {
@@ -926,6 +1056,8 @@ const getEstadisticasOperariosByEmpresa = async (req, res) => {
       replacements.operario_id = operario_id;
     }
     
+    const whereConditionsM3 = String(whereConditions || "").replace(/\bm\./g, "m3.");
+    
     const query = `
       SELECT 
         u.usu_documento AS operario_id,
@@ -942,11 +1074,27 @@ const getEstadisticasOperariosByEmpresa = async (req, res) => {
           THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
           ELSE NULL 
         END) AS tiempo_promedio_horas,
-        GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids
+        GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids,
+        sc.estaciones_conteo AS estaciones_conteo
       FROM bc_mantenimientos m
       JOIN bc_usuarios u ON m.operario_id = u.usu_documento
+      LEFT JOIN (
+        SELECT
+          y.operario_id,
+          GROUP_CONCAT(CONCAT(y.estacion_id, ':', y.cnt) SEPARATOR ',') AS estaciones_conteo
+        FROM (
+          SELECT
+            m3.operario_id,
+            m3.estacion_id,
+            COUNT(m3.id) AS cnt
+          FROM bc_mantenimientos m3
+          WHERE 1=1 ${whereConditionsM3}
+          GROUP BY m3.operario_id, m3.estacion_id
+        ) y
+        GROUP BY y.operario_id
+      ) sc ON sc.operario_id = u.usu_documento
       WHERE 1=1 ${whereConditions}
-      GROUP BY u.usu_documento, u.usu_nombre
+      GROUP BY u.usu_documento, u.usu_nombre, sc.estaciones_conteo
       HAVING total_mantenimientos > 0
       ORDER BY total_mantenimientos DESC
     `;
@@ -958,6 +1106,7 @@ const getEstadisticasOperariosByEmpresa = async (req, res) => {
     
     const estadisticasConEstaciones = estadisticas.map(item => {
       item.estaciones_ids = item.estaciones_ids ? item.estaciones_ids.split(',') : [];
+      item.estaciones_conteo = item.estaciones_conteo ? String(item.estaciones_conteo) : "";
       
       item.eficiencia = item.total_mantenimientos > 0
         ? ((item.mantenimientos_finalizados / item.total_mantenimientos) * 100).toFixed(2)
@@ -972,6 +1121,7 @@ const getEstadisticasOperariosByEmpresa = async (req, res) => {
     handleHttpError(res, "ERROR_GET_ESTADISTICAS_BY_EMPRESA");
   }
 };
+
 const getEstadisticasOperariosByEstacion = async (req, res) => {
   try {
     const { estacionId } = req.params;
@@ -1015,14 +1165,18 @@ const getEstadisticasOperariosByEstacion = async (req, res) => {
         SUM(CASE WHEN m.estado = 'pendiente' THEN 1 ELSE 0 END) AS mantenimientos_pendientes,
         SUM(CASE WHEN m.estado = 'cancelado' THEN 1 ELSE 0 END) AS mantenimientos_cancelados,
         COUNT(DISTINCT m.bicicleta_id) AS bicicletas_atendidas,
-        AVG(CASE WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
-            THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
-            ELSE NULL END) AS tiempo_promedio_horas
+        AVG(CASE 
+          WHEN m.estado = 'finalizado' AND m.fecha_finalizacion IS NOT NULL 
+          THEN TIMESTAMPDIFF(HOUR, m.fecha_creacion, m.fecha_finalizacion) 
+          ELSE NULL 
+        END) AS tiempo_promedio_horas,
+        GROUP_CONCAT(DISTINCT m.estacion_id) AS estaciones_ids
       FROM bc_mantenimientos m
       JOIN bc_usuarios u ON m.operario_id = u.usu_documento
       WHERE 1=1 ${whereConditions}
       GROUP BY u.usu_documento, u.usu_nombre, m.empresa_id, m.estacion_id
       HAVING total_mantenimientos > 0
+      ORDER BY total_mantenimientos DESC
     `;
     
     const estadisticas = await sequelize.query(query, { 
@@ -1196,6 +1350,7 @@ const getHistorialMantenimiento = async (req, res) => {
         handleHttpError(res, "ERROR_GET_HISTORIAL");
     }
 };
+
 const exportMantenimientosPorEmpresa = async (req, res) => {
     try {
         const { empresa_id } = matchedData(req);
@@ -1313,7 +1468,6 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
     }
 };
 
-
 const exportMantenimientosPorEstacion = async (req, res) => {
     try {
         const { estacion_id } = matchedData(req);
@@ -1425,7 +1579,6 @@ const exportMantenimientosPorEstacion = async (req, res) => {
     }
 };
 
-
 const getProductividadOperarios = async (req, res) => {
     const startedAt = Date.now();
     const requestId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1481,37 +1634,6 @@ const getProductividadOperarios = async (req, res) => {
         if (isNaN(start.getTime()) || isNaN(end.getTime()) || start > end) {
             return handleHttpError(res, "RANGO_FECHAS_INVALIDO", 400);
         }
-
-        console.log("[getProductividadOperarios][PING]", {
-            requestId,
-            hasFilter: !!(queryParams && queryParams.filter),
-            queryKeys: queryParams ? Object.keys(queryParams) : [],
-            paramsKeys: params ? Object.keys(params) : [],
-            debug_detalle_param: params ? params.debug_detalle : undefined,
-            solo_finalizados_param: params ? params.solo_finalizados : undefined,
-        });
-
-        console.log("[getProductividadOperarios][audit][FLAG]", {
-            requestId,
-            debug_detalle_param: params ? params.debug_detalle : undefined,
-            debug_detalle_header: req && req.headers ? req.headers["x-debug-detalle"] : undefined,
-            debug_detalle_env: process.env ? process.env.DEBUG_PRODUCTIVIDAD : undefined,
-            debug_always_env: process.env ? process.env.DEBUG_PRODUCTIVIDAD_ALWAYS : undefined,
-            auditEnabled,
-        });
-
-        if (auditEnabled) {
-            console.log("[getProductividadOperarios][audit][ON]", {
-                requestId,
-                fecha_inicio,
-                fecha_fin,
-                empresa_id,
-                estacion_id,
-                operario_id,
-                solo_finalizados: !!soloFinalizados,
-            });
-        }
-
         const tzFrom = "+00:00";
         const tzTo = "-05:00";
         const fechaCreacionLocalDate = sequelize.fn(
@@ -1610,18 +1732,6 @@ const getProductividadOperarios = async (req, res) => {
             return str;
         });
 
-        if (auditEnabled) {
-            console.log("[getProductividadOperarios][audit][insumos]", {
-                requestId,
-                whereMant,
-                estaciones_raw: estaciones,
-                estaciones_bici_keys: estacionesBiciKeys,
-                estaciones_id_to_nombre_sample: Array.from(estacionIdToNombre.entries()).slice(0, 10),
-                mantenimientosAgg_len: Array.isArray(mantenimientosAgg) ? mantenimientosAgg.length : null,
-                mantenimientosAgg_sample: Array.isArray(mantenimientosAgg) ? mantenimientosAgg.slice(0, 5) : null,
-            });
-        }
-
         const dispRows = estacionesBiciKeys.length
             ? await bicicletasModels.findAll({
                   attributes: [
@@ -1666,17 +1776,150 @@ const getProductividadOperarios = async (req, res) => {
             totMap.set(String(t.estacion_id), Number(t.bicicletas_total || 0));
         }
 
-        if (auditEnabled) {
-            console.log("[getProductividadOperarios][audit][bicicletas_disponibles]", {
-                requestId,
-                estacionesBiciKeys_len: estacionesBiciKeys.length,
-                dispRows_len: Array.isArray(dispRows) ? dispRows.length : null,
-                dispRows_sample: Array.isArray(dispRows) ? dispRows.slice(0, 10) : null,
-                totRows_len: Array.isArray(totRows) ? totRows.length : null,
-                totRows_sample: Array.isArray(totRows) ? totRows.slice(0, 10) : null,
-                dispMap_keys_sample: Array.from(dispMap.keys()).slice(0, 20),
-                totMap_keys_sample: Array.from(totMap.keys()).slice(0, 20),
-            });
+        const fechas = Array.from(
+            new Set(
+                (mantenimientosAgg || [])
+                    .map((x) => (x && x.fecha !== undefined && x.fecha !== null ? String(x.fecha).trim() : null))
+                    .filter((x) => x),
+            ),
+        );
+
+        const estacionesBiciKeysUnique = Array.from(
+            new Set((estacionesBiciKeys || []).map((x) => String(x).trim()).filter((x) => x !== "")),
+        );
+
+        const estadosPrestamoActivos = [
+            "ACTIVA",
+            "PRESTAMO PERSONALIZADO",
+            "PRESTAMO DE EMERGENCIA",
+        ];
+
+        // Conteo de bicicletas NO disponibles por fecha+estación en el periodo:
+        // - Préstamo activo en el día
+        // - Reserva activa en el día
+        // - Registro PP en el día
+        const unavailableByFechaEstacion = new Map();
+        if (fechas.length && estacionesBiciKeysUnique.length) {
+            for (const fechaDia of fechas) {
+                const dayLike = `${fechaDia}%`;
+                const rowsUnavailable = await sequelize.query(
+                    `
+                    SELECT
+                      b.bic_estacion AS estacion_id,
+                      COUNT(DISTINCT x.bic_id) AS unavailable
+                    FROM (
+                      SELECT p.pre_bicicleta AS bic_id
+                      FROM bc_prestamos p
+                      WHERE p.pre_estado IN (:estadosPrestamoActivos)
+                        AND p.pre_retiro_fecha <= CONCAT(:fechaDia, ' 23:59:59')
+                        AND (p.pre_devolucion_fecha IS NULL OR p.pre_devolucion_fecha >= CONCAT(:fechaDia, ' 00:00:00'))
+
+                      UNION
+
+                      SELECT r.res_bicicleta AS bic_id
+                      FROM bc_reservas r
+                      WHERE r.res_estado = 'ACTIVA'
+                        AND r.res_fecha_inicio <= :fechaDia
+                        AND r.res_fecha_fin >= :fechaDia
+
+                      UNION
+
+                      SELECT b2.bic_id AS bic_id
+                      FROM bc_registros_pp pp
+                      JOIN bc_bicicletas b2 ON b2.bic_numero = pp.vehiculo
+                      WHERE pp.fecha LIKE :dayLike
+                    ) x
+                    JOIN bc_bicicletas b ON b.bic_id = x.bic_id
+                    WHERE b.bic_estacion IN (:estaciones)
+                    GROUP BY b.bic_estacion
+                    `,
+                    {
+                        type: QueryTypes.SELECT,
+                        replacements: {
+                            estadosPrestamoActivos,
+                            fechaDia,
+                            dayLike,
+                            estaciones: estacionesBiciKeysUnique,
+                        },
+                    },
+                );
+
+                for (const u of rowsUnavailable || []) {
+                    const key = `${fechaDia}__${String(u.estacion_id)}`;
+                    unavailableByFechaEstacion.set(key, Number(u.unavailable || 0));
+                }
+            }
+        }
+
+        // Conteo de mantenimientos hechos en bicicletas NO disponibles (por fecha) para sumar al denominador.
+        // Regla: si estaba prestada/reservada/PP ese día pero se hizo mantenimiento, entonces se cuenta.
+        const adicionalesNoDisponiblesMap = new Map();
+        if (fechas.length && estacionesBiciKeysUnique.length) {
+            const adicionalesRows = await sequelize.query(
+                `
+                SELECT
+                  DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')) AS fecha,
+                  m.operario_id AS operario_id,
+                  m.estacion_id AS estacion_id,
+                  m.empresa_id AS empresa_id,
+                  COUNT(DISTINCT m.bicicleta_id) AS cnt
+                FROM bc_mantenimientos m
+                JOIN bc_bicicletas b ON b.bic_id = m.bicicleta_id
+                WHERE DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')) >= :fecha_inicio
+                  AND DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')) <= :fecha_fin
+                  AND (:empresa_id IS NULL OR m.empresa_id = :empresa_id)
+                  AND (:estacion_id IS NULL OR m.estacion_id = :estacion_id)
+                  AND (:operario_id IS NULL OR m.operario_id = :operario_id)
+                  AND (
+                    EXISTS (
+                      SELECT 1
+                      FROM bc_prestamos p
+                      WHERE p.pre_bicicleta = m.bicicleta_id
+                        AND p.pre_estado IN (:estadosPrestamoActivos)
+                        AND p.pre_retiro_fecha <= CONCAT(DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')), ' 23:59:59')
+                        AND (
+                          p.pre_devolucion_fecha IS NULL
+                          OR p.pre_devolucion_fecha >= CONCAT(DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')), ' 00:00:00')
+                        )
+                    )
+                    OR EXISTS (
+                      SELECT 1
+                      FROM bc_reservas r
+                      WHERE r.res_bicicleta = m.bicicleta_id
+                        AND r.res_estado = 'ACTIVA'
+                        AND r.res_fecha_inicio <= DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00'))
+                        AND r.res_fecha_fin >= DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00'))
+                    )
+                    OR EXISTS (
+                      SELECT 1
+                      FROM bc_registros_pp pp
+                      WHERE pp.vehiculo = b.bic_numero
+                        AND pp.fecha LIKE CONCAT(DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')), '%')
+                    )
+                  )
+                GROUP BY
+                  DATE(CONVERT_TZ(m.fecha_creacion, '+00:00', '-05:00')),
+                  m.operario_id,
+                  m.estacion_id,
+                  m.empresa_id
+                `,
+                {
+                    type: QueryTypes.SELECT,
+                    replacements: {
+                        fecha_inicio,
+                        fecha_fin,
+                        empresa_id: empresa_id ? String(empresa_id) : null,
+                        estacion_id: estacion_id ? String(estacion_id) : null,
+                        operario_id: operario_id ? String(operario_id) : null,
+                        estadosPrestamoActivos,
+                    },
+                },
+            );
+
+            for (const a of adicionalesRows || []) {
+                const key = `${String(a.fecha).trim()}__${String(a.operario_id).trim()}__${String(a.estacion_id).trim()}__${String(a.empresa_id).trim()}`;
+                adicionalesNoDisponiblesMap.set(key, Number(a.cnt || 0));
+            }
         }
 
         const rows = (mantenimientosAgg || []).map((r) => {
@@ -1685,17 +1928,21 @@ const getProductividadOperarios = async (req, res) => {
                 ? (estacionIdToNombre.get(Number(estacionStr)) ? String(estacionIdToNombre.get(Number(estacionStr))) : estacionStr)
                 : estacionStr;
 
-            const bicicletasDisponibles = dispMap.get(String(estacionBiciKey)) || 0;
             const bicicletasTotal = totMap.get(String(estacionBiciKey)) || 0;
             const bicicletasRevisadas = Number(r.bicicletas_revisadas || 0);
-            const adicionalesNoDisponibles = Number(r.bicicletas_no_disponibles_revisadas || 0);
+            const fechaDia = String(r.fecha).trim();
+            const unavailableKey = `${fechaDia}__${String(estacionBiciKey)}`;
+            const unavailableCount = unavailableByFechaEstacion.get(unavailableKey) || 0;
+            const bicicletasDisponibles = Math.max(bicicletasTotal - unavailableCount, 0);
 
-            const bicicletasRequeridas = bicicletasTotal;
+            const adicionalesKey = `${fechaDia}__${String(r.operario_id).trim()}__${String(r.estacion_id).trim()}__${String(r.empresa_id).trim()}`;
+            const adicionalesNoDisponibles = adicionalesNoDisponiblesMap.get(adicionalesKey) || 0;
+
+            const bicicletasRequeridas = bicicletasDisponibles + adicionalesNoDisponibles;
             const productividad =
                 bicicletasRequeridas > 0
                     ? Number(((bicicletasRevisadas / bicicletasRequeridas) * 100).toFixed(2))
                     : null;
-
             return {
                 fecha: r.fecha,
                 dia_semana: null,
@@ -1712,10 +1959,11 @@ const getProductividadOperarios = async (req, res) => {
                     ? {
                         estacion_id_raw: r.estacion_id,
                         estacion_bici_key: estacionBiciKey,
-                        disp_lookup: dispMap.get(String(estacionBiciKey)) || 0,
                         total_lookup: totMap.get(String(estacionBiciKey)) || 0,
+                        unavailable_lookup: unavailableByFechaEstacion.get(unavailableKey) || 0,
+                        no_disponibles_revisadas_lookup: adicionalesNoDisponibles,
                         formula:
-                            "requeridas = total_bicicletas_en_estacion; productividad = (revisadas / requeridas) * 100",
+                            "requeridas = (total - no_disponibles_en_fecha) + no_disponibles_revisadas_en_fecha; productividad = (revisadas / requeridas) * 100",
                     }
                     : undefined,
             };
@@ -1814,7 +2062,7 @@ const getProductividadOperarios = async (req, res) => {
                         revisadas: Number(ej.bicicletas_revisadas || 0),
                         productividad: ej.productividad,
                         regla:
-                            "requeridas = total_bicicletas_en_estacion; productividad = (revisadas / requeridas) * 100",
+                            "requeridas = (total - no_disponibles_en_fecha) + no_disponibles_revisadas_en_fecha; productividad = (revisadas / requeridas) * 100",
                     },
                     flags: {
                         solo_finalizados: !!soloFinalizados,
@@ -1822,26 +2070,6 @@ const getProductividadOperarios = async (req, res) => {
                     },
                 });
             }
-
-            console.log(
-                "[getProductividadOperarios][verificacion]",
-                JSON.stringify(
-                    {
-                        requestId,
-                        params: {
-                            fecha_inicio,
-                            fecha_fin,
-                            empresa_id,
-                            estacion_id,
-                            operario_id,
-                            solo_finalizados: !!soloFinalizados,
-                        },
-                        ejemplos: debug_detalle,
-                    },
-                    null,
-                    2,
-                ),
-            );
         }
 
         return res.send({
@@ -1878,13 +2106,6 @@ const getProductividadOperarios = async (req, res) => {
                 req.headers &&
                 (req.headers["x-debug-detalle"] === "1" || req.headers["x-debug-detalle"] === 1)) ||
             (process.env && (process.env.DEBUG_PRODUCTIVIDAD === "1" || process.env.DEBUG_PRODUCTIVIDAD === "true"));
-
-        if (audit) {
-            console.log("[getProductividadOperarios][audit][END]", {
-                requestId,
-                elapsedMs,
-            });
-        }
     }
 };
 
