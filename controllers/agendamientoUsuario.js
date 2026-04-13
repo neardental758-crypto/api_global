@@ -1,5 +1,5 @@
 const { matchedData } = require('express-validator');
-const { agendamientoUsuariosModels, usuarioModels } = require('../models');
+const { agendamientoUsuariosModels, usuarioModels, teoricaModels } = require('../models');
 const Usuario = require('../models/mysql/usuario');
 const Empresa = require('../models/mysql/empresa');
 const Practica = require('../models/mysql/practicaActiva');
@@ -138,6 +138,34 @@ const patchItem = async (req, res) => {
 
         if (data[0] === 0) {
             return res.status(404).send('No se encontró el registro para actualizar');
+        }
+
+        try {
+            const agendado = await agendamientoUsuariosModels.findOne({
+                where: { _id },
+            });
+
+            const cedula = agendado && agendado.agendado_cedula ? String(agendado.agendado_cedula) : null;
+            const agendadoResultado = agendado && agendado.agendado_resultado ? String(agendado.agendado_resultado) : null;
+
+            if (cedula && agendadoResultado === 'APROBADO') {
+                const teorica = await teoricaModels.findOne({
+                    where: {
+                        teorica_usuario: cedula,
+                        teorica_resultado: 'APROBO',
+                    },
+                    order: [['teorica_fecha', 'DESC']],
+                });
+
+                if (teorica) {
+                    await usuarioModels.update(
+                        { usu_habilitado: 1 },
+                        { where: { usu_documento: cedula } }
+                    );
+                }
+            }
+        } catch (extraError) {
+            console.error('Error habilitando usuario tras aprobar práctica:', extraError);
         }
 
         res.send('ok');
