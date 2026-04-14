@@ -408,61 +408,283 @@ const getMantenimientosPorBicicleta = async (req, res) => {
 };
 
 const crearMantenimiento = async (req, res) => {
+    const transaction = await sequelize.transaction();
     try {
-        const data = await mantenimientoModels.create(req.body || {});
-        res.send({ data });
+        const body = matchedData(req);
+        
+        const { diagnostico_componentes, ...mantenimientoData } = body;
+        
+        // Asegurar que estacion_id sea número
+        if (mantenimientoData.estacion_id !== undefined && mantenimientoData.estacion_id !== null) {
+            // Convertir explícitamente a entero
+            mantenimientoData.estacion_id = parseInt(mantenimientoData.estacion_id, 10);
+            
+            // Verificar si la conversión fue exitosa
+            if (isNaN(mantenimientoData.estacion_id)) {
+                throw new Error("estacion_id no es un número válido");
+            }
+        }
+        
+        // Si no hay prioridad, establecer media como valor por defecto
+        if (!mantenimientoData.prioridad) {
+            mantenimientoData.prioridad = 'media';
+        }
+        
+        const mantenimientoCreado = await mantenimientoModels.create(mantenimientoData, { transaction });
+        
+        if (diagnostico_componentes && diagnostico_componentes.length > 0) {
+            const historialRegistros = [];
+            
+            for (const componente of diagnostico_componentes) {
+                const historialItem = {
+                    mantenimiento_id: mantenimientoCreado.id,
+                    componente_id: componente.componente_id,
+                    estado_anterior: 'ok',
+                    estado_nuevo: componente.estado,
+                    accion_realizada: 'diagnóstico',
+                    comentario: componente.comentario || '',
+                    operario_id: mantenimientoData.operario_id
+                };
+                historialRegistros.push(historialItem);
+                
+                await estadoComponenteModels.upsert({
+                    bicicleta_id: mantenimientoData.bicicleta_id,
+                    componente_id: componente.componente_id,
+                    estado: componente.estado
+                }, { transaction });
+            }
+            
+            if (historialRegistros.length > 0) {
+                await historialMantenimientoModels.bulkCreate(historialRegistros, { transaction });
+            }
+        }
+        
+        // Si el estado es finalizado, establecer fecha de finalización
+        if (mantenimientoData.estado === 'finalizado') {
+            await mantenimientoCreado.update({ 
+                fecha_finalizacion: new Date() 
+            }, { transaction });
+        }
+        
+        await transaction.commit();
+        
+        const dataCompleta = await mantenimientoModels.findByPk(mantenimientoCreado.id, {
+            include: [
+                {
+                    model: historialMantenimientoModels,
+                    include: [
+                        {
+                            model: componenteModels,
+                            attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+                        }
+                    ]
+                }
+            ]
+        });
+        
+        res.status(201).send({ data: dataCompleta });
     } catch (error) {
-        console.error(error);
-        handleHttpError(res, 'ERROR_CREATE_MANTENIMIENTO');
+        await transaction.rollback();
+        console.error("Backend ERROR:", error);
+        handleHttpError(res, "ERROR_CREAR_MANTENIMIENTO");
     }
 };
 
 const actualizarMantenimiento = async (req, res) => {
     try {
-        const { id } = matchedData(req);
-        await mantenimientoModels.update(req.body || {}, { where: { id } });
-        const data = await mantenimientoModels.findByPk(id);
-        res.send({ data });
+        const { id, ...body } = matchedData(req);
+        
+        const mantenimiento = await mantenimientoModels.findByPk(id);
+        if (!mantenimiento) {
+            return handleHttpError(res, "MANTENIMIENTO_NO_ENCONTRADO", 404);
+        }
+        
+        // Si el estado es finalizado, agregar fecha de finalización
+        if (body.estado === 'finalizado' && mantenimiento.estado !== 'finalizado') {
+            body.fecha_finalizacion = new Date();
+        }
+        
+        await mantenimiento.update(body);
+        
+        const dataActualizada = await mantenimientoModels.findByPk(id, {
+            include: [
+                {
+                    model: historialMantenimientoModels,
+                    include: [
+                        {
+                            model: componenteModels,
+                            attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+                        }
+                    ]
+                }
+            ]
+        });
+        
+        res.send({ data: dataActualizada });
     } catch (error) {
         console.error(error);
-        handleHttpError(res, 'ERROR_UPDATE_MANTENIMIENTO');
+        handleHttpError(res, "ERROR_ACTUALIZAR_MANTENIMIENTO");
     }
 };
 
 const finalizarMantenimiento = async (req, res) => {
+    const transaction = await sequelize.transaction();
     try {
-        const { id } = matchedData(req);
-        await mantenimientoModels.update(
-            { estado: 'finalizado', fecha_finalizacion: new Date() },
-            { where: { id } },
-        );
-        const data = await mantenimientoModels.findByPk(id);
-        res.send({ data });
+      const { id, comentarios } = matchedData(req);
+      
+      const mantenimiento = await mantenimientoModels.findByPk(id, {
+        include: [
+          {
+            model: bicicletasModels,
+            attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado']
+          },
+          {
+            model: historialMantenimientoModels,
+            include: [
+              {
+                model: componenteModels,
+                attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+              }
+            ]
+          }
+        ]
+      });
+      
+      if (!mantenimiento) {
+        await transaction.rollback();
+        return res.status(404).send({ error: "MANTENIMIENTO_NO_ENCONTRADO" });
+      }
+      
+      if (mantenimiento.estado === 'finalizado') {
+        await transaction.rollback();
+        return res.status(400).send({ error: "MANTENIMIENTO_YA_FINALIZADO" });
+      }
+      
+      const historialComponentesConProblemas = mantenimiento.bc_historial_mantenimientos || [];
+      
+      const nuevosRegistrosHistorial = [];
+      
+      for (const historial of historialComponentesConProblemas) {
+        if (historial.estado_nuevo !== 'ok') {
+          nuevosRegistrosHistorial.push({
+            mantenimiento_id: mantenimiento.id,
+            componente_id: historial.componente_id,
+            estado_anterior: historial.estado_nuevo,
+            estado_nuevo: 'ok',
+            accion_realizada: 'reparación',
+            comentario: ``,
+            operario_id: mantenimiento.operario_id,
+            fecha_registro: new Date()
+          });
+          
+          await estadoComponenteModels.upsert({
+            bicicleta_id: mantenimiento.bicicleta_id,
+            componente_id: historial.componente_id,
+            estado: 'ok'
+          }, { transaction });
+        }
+      }
+      
+      if (nuevosRegistrosHistorial.length > 0) {
+        await historialMantenimientoModels.bulkCreate(nuevosRegistrosHistorial, { transaction });
+      }
+      
+      await mantenimiento.update(
+        {
+          estado: 'finalizado',
+          fecha_finalizacion: new Date(),
+          comentarios: comentarios || mantenimiento.comentarios
+        },
+        { transaction }
+      );
+      
+      if (mantenimiento.bicicleta_id && mantenimiento.bc_bicicleta) {
+        const estadoActualBicicleta = mantenimiento.bc_bicicleta.bic_estado;
+        const estadosEspeciales = ['PRESTADA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA'];
+        
+        if (!estadosEspeciales.includes(estadoActualBicicleta)) {
+          await bicicletasModels.update(
+            { bic_estado: 'DISPONIBLE' },
+            { 
+              where: { bic_id: mantenimiento.bicicleta_id },
+              transaction 
+            }
+          );
+        }
+      }
+      
+      await transaction.commit();
+      
+      const dataFinalizada = await mantenimientoModels.findByPk(id, {
+        include: [
+          {
+            model: bicicletasModels,
+            attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado']
+          },
+          {
+            model: historialMantenimientoModels,
+            include: [
+              {
+                model: componenteModels,
+                attributes: ['comp_id', 'comp_nombre', 'categoria_id']
+              }
+            ]
+          }
+        ]
+      });
+      
+      res.send({ data: dataFinalizada });
     } catch (error) {
-        console.error(error);
-        handleHttpError(res, 'ERROR_FINALIZAR_MANTENIMIENTO');
+      await transaction.rollback();
+      console.error("Error al finalizar mantenimiento:", error);
+      res.status(500).send({ error: "ERROR_FINALIZAR_MANTENIMIENTO" });
     }
 };
 
 const cancelarMantenimiento = async (req, res) => {
+    const transaction = await sequelize.transaction();
     try {
         const { id } = matchedData(req);
-        await mantenimientoModels.update({ estado: 'cancelado' }, { where: { id } });
-        const data = await mantenimientoModels.findByPk(id);
-        res.send({ data });
+        
+        const mantenimiento = await mantenimientoModels.findByPk(id);
+        if (!mantenimiento) {
+            await transaction.rollback();
+            return res.status(404).send({ error: "MANTENIMIENTO_NO_ENCONTRADO" });
+        }
+        
+        if (mantenimiento.estado === 'cancelado') {
+            await transaction.rollback();
+            return res.status(400).send({ error: "MANTENIMIENTO_YA_CANCELADO" });
+        }
+        
+        if (mantenimiento.estado === 'finalizado') {
+            await transaction.rollback();
+            return res.status(400).send({ error: "NO_SE_PUEDE_CANCELAR_MANTENIMIENTO_FINALIZADO" });
+        }
+        
+        // Cancelar el mantenimiento
+        await mantenimiento.update(
+            {
+                estado: 'cancelado'
+            },
+            { transaction }
+        );
+        
+        await transaction.commit();
+        
+        res.send({ data: { id, message: "Mantenimiento cancelado correctamente" } });
     } catch (error) {
+        await transaction.rollback();
         console.error(error);
-        handleHttpError(res, 'ERROR_CANCELAR_MANTENIMIENTO');
+        res.status(500).send({ error: "ERROR_CANCELAR_MANTENIMIENTO" });
     }
-};
-
-const getMantenimientosPorOperario = async (req, res) => {
+};const getMantenimientosPorOperario = async (req, res) => {
     try {
         const { operario_id } = matchedData(req);
-
+        
         let page = 1;
         let limit = 10;
-
+        
         if (req.query.filter) {
             const filter = JSON.parse(req.query.filter);
             page = parseInt(filter.page) || 1;
@@ -471,41 +693,105 @@ const getMantenimientosPorOperario = async (req, res) => {
             page = parseInt(req.query.page) || 1;
             limit = parseInt(req.query.limit) || 10;
         }
-
+        
         const offset = (page - 1) * limit;
         const whereClause = { operario_id };
+        const filterObj = req.query.filter ? JSON.parse(req.query.filter) : req.query;
+        
+        
+        if (filterObj.empresa_id) whereClause.empresa_id = filterObj.empresa_id;
+        if (filterObj.estado && filterObj.estado !== 'todos') whereClause.estado = filterObj.estado;
+        if (filterObj.prioridad && filterObj.prioridad !== 'todos') whereClause.prioridad = filterObj.prioridad;
+        
+        if (filterObj.fecha_inicio || filterObj.fecha_fin) {
+            whereClause.fecha_creacion = {};
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            if (filterObj.fecha_fin) {
+                const fechaFin = new Date(filterObj.fecha_fin);
+                fechaFin.setHours(23, 59, 59, 999);
+                whereClause.fecha_creacion[Op.lte] = fechaFin;
+            }
+        }
 
-        const { rows, count } = await mantenimientoModels.findAndCountAll({
-            where: whereClause,
-            include: [
-                {
-                    model: bicicletasModels,
-                    attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado'],
-                },
-                {
-                    model: usuarioModels,
-                    as: 'operario',
-                    attributes: ['usu_documento', 'usu_nombre', 'usu_empresa', 'usu_ciudad'],
-                },
-            ],
-            limit,
-            offset,
-            order: [['fecha_creacion', 'DESC']],
-            distinct: true,
+        if (filterObj.ordenar_por === 'fecha_hoy') {
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const mañana = new Date(hoy);
+            mañana.setDate(mañana.getDate() + 1);
+            whereClause.fecha_creacion = {
+                [Op.gte]: hoy,
+                [Op.lt]: mañana
+            };
+        }
+
+        const includes = [];
+        const bicicletaWhere = {};
+        
+        if (filterObj.bicicleta) {
+            bicicletaWhere[Op.or] = [
+                { bic_numero: { [Op.like]: `%${filterObj.bicicleta}%` } },
+                { bic_id: isNaN(filterObj.bicicleta) ? null : parseInt(filterObj.bicicleta) }
+            ];
+        }
+
+        if (filterObj.estacion_id) {
+            bicicletaWhere.bic_estacion = filterObj.estacion_id;
+        }
+
+        if (filterObj.ordenar_por === 'bicicletas_taller') {
+            bicicletaWhere.bic_estado = {
+                [Op.in]: ['EN_MANTENIMIENTO', 'EN TALLER', 'REPARACION', 'REVISION']
+            };
+        }
+
+        includes.push({
+            model: bicicletasModels,
+            where: Object.keys(bicicletaWhere).length > 0 ? bicicletaWhere : undefined,
+            attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado']
         });
 
-        res.send({
+        includes.push({
+            model: usuarioModels,
+            as: 'operario',
+            attributes: ['usu_documento', 'usu_nombre']
+        });
+
+        let orderBy = [['fecha_creacion', 'DESC']];
+        if (filterObj.ordenar_por) {
+            switch(filterObj.ordenar_por) {
+                case 'fecha_creacion_asc':
+                    orderBy = [['fecha_creacion', 'ASC']];
+                    break;
+                case 'pendientes_primero':
+                    orderBy = [[sequelize.literal("CASE WHEN estado = 'pendiente' THEN 0 ELSE 1 END"), 'ASC'], ['fecha_creacion', 'DESC']];
+                    break;
+                case 'en_proceso_primero':
+                    orderBy = [[sequelize.literal("CASE WHEN estado = 'en_proceso' THEN 0 ELSE 1 END"), 'ASC'], ['fecha_creacion', 'DESC']];
+                    break;
+            }
+        }
+
+        const { count, rows } = await mantenimientoModels.findAndCountAll({
+            where: whereClause,
+            include: includes,
+            limit,
+            offset,
+            order: orderBy,
+            distinct: true
+        });
+
+        res.send({ 
             data: rows,
             pagination: {
                 total: count,
                 page,
                 limit,
-                totalPages: Math.ceil(count / limit),
-            },
+                totalPages: Math.ceil(count / limit)
+            }
         });
     } catch (error) {
         console.error(error);
-        handleHttpError(res, 'ERROR_GET_MANTENIMIENTOS_POR_OPERARIO');
+        handleHttpError(res, "ERROR_GET_MANTENIMIENTOS_POR_OPERARIO");
     }
 };
 
@@ -535,7 +821,6 @@ const getComponentesConCategorias = async (req, res) => {
       handleHttpError(res, "ERROR_GET_COMPONENTES_CATEGORIAS");
     }
   };
-
 const crearMantenimientosMasivo = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
