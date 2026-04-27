@@ -310,18 +310,28 @@ const getEmpresasOperario = async (req, res) => {
       where: { usu_documento: operario_id }
     });
     
-    if (!usuarioEmpresas || !usuarioEmpresas.empresa_ids || usuarioEmpresas.empresa_ids.length === 0) {
+    let empresaIds = usuarioEmpresas.empresa_ids;
+    if (typeof empresaIds === 'string') {
+      try {
+        empresaIds = JSON.parse(empresaIds);
+      } catch (e) {
+        empresaIds = [];
+      }
+    }
+
+    if (!empresaIds || !Array.isArray(empresaIds) || empresaIds.length === 0) {
       return res.send([]);
     }
     
     const empresas = await empresaModels.findAll({
       where: {
         emp_id: {
-          [Op.in]: usuarioEmpresas.empresa_ids
+          [Op.in]: empresaIds
         }
       }
     });
     
+    console.log("== DEBUG backend getEmpresasOperario ==", "operario_id:", operario_id, "empresaIds queried:", empresaIds, "Result length:", empresas.length);
     res.send(empresas);
   } catch (error) {
     console.error('Error getEmpresasOperario:', error);
