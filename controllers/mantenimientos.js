@@ -130,11 +130,11 @@ const getMantenimientosPorEmpresa = async (req, res) => {
 
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
-            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            // Comparar como string para evitar conversion UTC que desplaza la fecha
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = literal(`'${filterObj.fecha_inicio}'`);
             if (filterObj.fecha_fin) {
-                const fechaFin = new Date(filterObj.fecha_fin);
-                fechaFin.setHours(23, 59, 59, 999);
-                whereClause.fecha_creacion[Op.lte] = fechaFin;
+                const finDia = String(filterObj.fecha_fin).replace(/\s.*/, '') + ' 23:59:59';
+                whereClause.fecha_creacion[Op.lte] = literal(`'${finDia}'`);
             }
         }
 
@@ -272,11 +272,11 @@ const getMantenimientosPorEstacion = async (req, res) => {
 
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
-            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            // Comparar como string para evitar conversion UTC que desplaza la fecha
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = literal(`'${filterObj.fecha_inicio}'`);
             if (filterObj.fecha_fin) {
-                const fechaFin = new Date(filterObj.fecha_fin);
-                fechaFin.setHours(23, 59, 59, 999);
-                whereClause.fecha_creacion[Op.lte] = fechaFin;
+                const finDia = String(filterObj.fecha_fin).replace(/\s.*/, '') + ' 23:59:59';
+                whereClause.fecha_creacion[Op.lte] = literal(`'${finDia}'`);
             }
         }
 
@@ -705,11 +705,11 @@ const cancelarMantenimiento = async (req, res) => {
         
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
-            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            // Comparar como string para evitar conversion UTC que desplaza la fecha
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = literal(`'${filterObj.fecha_inicio}'`);
             if (filterObj.fecha_fin) {
-                const fechaFin = new Date(filterObj.fecha_fin);
-                fechaFin.setHours(23, 59, 59, 999);
-                whereClause.fecha_creacion[Op.lte] = fechaFin;
+                const finDia = String(filterObj.fecha_fin).replace(/\s.*/, '') + ' 23:59:59';
+                whereClause.fecha_creacion[Op.lte] = literal(`'${finDia}'`);
             }
         }
 
@@ -1649,11 +1649,11 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
 
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
-            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            // Comparar como string para evitar conversion UTC que desplaza la fecha
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = literal(`'${filterObj.fecha_inicio}'`);
             if (filterObj.fecha_fin) {
-                const fechaFin = new Date(filterObj.fecha_fin);
-                fechaFin.setHours(23, 59, 59, 999);
-                whereClause.fecha_creacion[Op.lte] = fechaFin;
+                const finDia = String(filterObj.fecha_fin).replace(/\s.*/, '') + ' 23:59:59';
+                whereClause.fecha_creacion[Op.lte] = literal(`'${finDia}'`);
             }
         }
 
@@ -1765,11 +1765,11 @@ const exportMantenimientosPorEstacion = async (req, res) => {
 
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
-            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = new Date(filterObj.fecha_inicio);
+            // Comparar como string para evitar conversion UTC que desplaza la fecha
+            if (filterObj.fecha_inicio) whereClause.fecha_creacion[Op.gte] = literal(`'${filterObj.fecha_inicio}'`);
             if (filterObj.fecha_fin) {
-                const fechaFin = new Date(filterObj.fecha_fin);
-                fechaFin.setHours(23, 59, 59, 999);
-                whereClause.fecha_creacion[Op.lte] = fechaFin;
+                const finDia = String(filterObj.fecha_fin).replace(/\s.*/, '') + ' 23:59:59';
+                whereClause.fecha_creacion[Op.lte] = literal(`'${finDia}'`);
             }
         }
 
