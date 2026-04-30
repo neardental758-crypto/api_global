@@ -5,7 +5,6 @@ const validatorCreate = [
     check("his_id").exists().notEmpty(),
     check("his_usuario").exists().notEmpty(),
     check("his_estacion").exists().notEmpty(),
-    check("his_bicicletero").exists().notEmpty(),
     check("his_bicicleta").exists().notEmpty(),
     check("his_fecha").exists().notEmpty(),
     check("his_clave_old").exists().notEmpty(),

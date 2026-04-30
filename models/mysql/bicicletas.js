@@ -29,6 +29,12 @@ const Bicicleta = sequelize.define(
         },
         bic_updated_at: {
             type: DataTypes.DATE,
+        },
+        bic_bluetooth: {
+            type: DataTypes.STRING,
+        },
+        bic_clave: {
+            type: DataTypes.STRING,
         }
     },
     {

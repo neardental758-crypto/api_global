@@ -22,9 +22,6 @@ const Prestamos = sequelize.define(
         pre_retiro_estacion: {
             type: DataTypes.STRING,
         },
-        pre_retiro_bicicletero: {
-            type: DataTypes.INTEGER,
-        },
         pre_retiro_fecha: {
             type: DataTypes.DATE,
         },
@@ -33,9 +30,6 @@ const Prestamos = sequelize.define(
         },
         pre_devolucion_estacion: {
             type: DataTypes.STRING,
-        },
-        pre_devolucion_bicicletero: {
-            type: DataTypes.INTEGER,
         },
         pre_devolucion_fecha: {
             type: DataTypes.DATE,

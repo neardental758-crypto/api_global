@@ -442,18 +442,8 @@ const getItemPrestamosUsuario = async (req, res) => {
             'bic_estacion',
             'bic_estado',
             'bic_descripcion',
-          ],
-        },
-        {
-          model: Bicicletero,
-          attributes: [
-            'bro_id',
-            'bro_nombre',
-            'bro_estacion',
-            'bro_numero',
-            'bro_bicicleta',
-            'bro_bluetooth',
-            'bro_clave'
+            'bic_bluetooth',
+            'bic_clave'
           ],
         }
       ],
@@ -1182,24 +1172,11 @@ const finalizeLoan = async (req, res) => {
     const esMicrosistema = bicicleta.bic_descripcion &&
       bicicleta.bic_descripcion.toLowerCase().includes('microsistema');
 
-    const bicicletero = await Bicicletero.findOne({
-      where: { bro_bicicleta: prestamo.pre_bicicleta },
-      transaction
-    });
-
-    if (!bicicletero) {
-      await transaction.rollback();
-      return res.status(404).json({
-        success: false,
-        message: 'No se encontró el bicicletero asociado a esta bicicleta'
-      });
-    }
-
     const generateRandomKey = () => {
       return Math.floor(1000 + Math.random() * 9000).toString();
     };
 
-    const claveAnterior = bicicletero.bro_clave;
+    const claveAnterior = bicicleta.bic_clave;
     const claveNueva = generateRandomKey();
 
     if (prestamo.pre_id === prestamoMasReciente.pre_id) {
@@ -1238,7 +1215,6 @@ const finalizeLoan = async (req, res) => {
       await Historiales.create({
         his_usuario: prestamo.pre_usuario,
         his_estacion: prestamo.pre_retiro_estacion,
-        his_bicicletero: bicicletero.bro_id,
         his_bicicleta: prestamo.pre_bicicleta,
         his_fecha: fechaCompleta.toISOString().slice(0, 19).replace('T', ' '),
         his_clave_old: claveAnterior,
@@ -1257,7 +1233,7 @@ const finalizeLoan = async (req, res) => {
         estado_prestamo: 'FINALIZADA',
         estado_bicicleta: estadoBicicleta,
         nueva_clave: esMicrosistema ? 'Sin cambio (microsistema)' : claveNueva,
-        bicicletero_id: bicicletero.bro_id,
+        bicicletero_id: bicicleta.bic_id,
         otros_prestamos_finalizados: otrosPrestamosActivos.length,
         es_microsistema: esMicrosistema,
         finalizado_por: finalizedBy ? String(finalizedBy) : null,
@@ -1697,18 +1673,8 @@ const getItemPrestamosUsuario_cortezza = async (req, res) => {
             'bic_estacion',
             'bic_estado',
             'bic_descripcion',
-          ],
-        },
-        {
-          model: Bicicletero,
-          attributes: [
-            'bro_id',
-            'bro_nombre',
-            'bro_estacion',
-            'bro_numero',
-            'bro_bicicleta',
-            'bro_bluetooth',
-            'bro_clave'
+            'bic_bluetooth',
+            'bic_clave'
           ],
         },
         {

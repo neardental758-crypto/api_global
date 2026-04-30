@@ -162,9 +162,6 @@ if (MOTORDB === 'mysql') {
     Prestamos.belongsTo(Bicicleta, { foreignKey: "pre_bicicleta" });
     Bicicleta.hasOne(Prestamos, { foreignKey: "pre_bicicleta" });
 
-    Prestamos.belongsTo(Bicicletero, { foreignKey: "pre_retiro_bicicletero" });
-    Bicicletero.hasOne(Prestamos, { foreignKey: "pre_retiro_bicicletero" });
-
     Estacion.belongsTo(Empresa, { foreignKey: "est_empresa", targetKey: "emp_nombre" });
     Empresa.hasMany(Estacion, { foreignKey: "est_empresa", sourceKey: "emp_nombre" });
 

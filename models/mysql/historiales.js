@@ -15,9 +15,6 @@ const Historiales = sequelize.define(
         his_estacion: {
             type: DataTypes.STRING,
         },
-        his_bicicletero: {
-            type: DataTypes.INTEGER,
-        },
         his_bicicleta: {
             type: DataTypes.INTEGER,
         },

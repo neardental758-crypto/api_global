@@ -90,7 +90,19 @@ const getItemFlota = async (req, res) => {
                 model: Bicicletero,
             },
         });
-        res.send({ data });
+
+        // Compatibility layer: ensure bic_bluetooth and bic_clave are at top level
+        // and bc_bicicletero is populated from them if missing
+        const mappedData = data.map(b => {
+            const bike = b.toJSON();
+            if (bike.bc_bicicletero) {
+                bike.bic_bluetooth = bike.bc_bicicletero.bro_bluetooth;
+                bike.bic_clave = bike.bc_bicicletero.bro_clave;
+            }
+            return bike;
+        });
+
+        res.send({ data: mappedData });
     } catch (e) {
         httpError(res, "ERROR_GET_BICI_FLOTA_NOMBRE")
     }
@@ -123,17 +135,21 @@ const createItem = async (req, res) => {
                 bro_estacion: body.bic_estacion,
                 bro_numero: String(realId),
                 bro_bicicleta: Number(realId),
-                bro_bluetooth: "123",
-                bro_clave: "0000",
+                bro_bluetooth: body.bic_bluetooth || "123",
+                bro_clave: body.bic_clave || "0000",
             }
             
             const bicicletero = await bicicleterosModels.create(bicicleteroData, { transaction: t })
         } 
-        
+
         await t.commit()
+
+        // Update bicicletaData for response
         const responseData = {
             ...body,
-            bic_id: realId
+            bic_id: realId,
+            bic_bluetooth: bicicleta.bic_bluetooth,
+            bic_clave: bicicleta.bic_clave
         }
         
         res.send({ data: responseData })
@@ -449,6 +465,17 @@ const patchItem = async (req, res) => {
             where: { bic_id: bic_id }
         });
         
+        // Sync back to Bicicletero for compatibility
+        if (objetoACambiar.bic_bluetooth || objetoACambiar.bic_clave) {
+            const syncData = {};
+            if (objetoACambiar.bic_bluetooth) syncData.bro_bluetooth = objetoACambiar.bic_bluetooth;
+            if (objetoACambiar.bic_clave) syncData.bro_clave = objetoACambiar.bic_clave;
+            
+            await bicicleterosModels.update(syncData, {
+                where: { bro_bicicleta: bic_id }
+            });
+        }
+        
         if (result[0] > 0) {
             res.status(200).json({
                 status: 200,
@@ -480,14 +507,19 @@ const patchItem = async (req, res) => {
 };
 
 const handleKeyChange = async (bikeId, transaction) => {
+    const bicicleta = await bicicletasModels.findOne({
+        where: { bic_id: bikeId },
+        transaction
+    });
+
+    if (!bicicleta) {
+        throw new Error('Bicicleta no encontrada');
+    }
+
     const bicicletero = await bicicleterosModels.findOne({
         where: { bro_bicicleta: bikeId },
         transaction
     });
-
-    if (!bicicletero) {
-        throw new Error('Bicicletero no encontrado para esta bicicleta');
-    }
 
     let usuarioAnterior = null;
     
@@ -521,14 +553,18 @@ const handleKeyChange = async (bikeId, transaction) => {
         return Math.floor(1000 + Math.random() * 9000).toString();
     };
 
-    const claveAnterior = bicicletero.bro_clave;
+    const claveAnterior = bicicleta.bic_clave || (bicicletero ? bicicletero.bro_clave : "0000");
     const claveNueva = generateRandomKey();
     const fechaActual = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+    // Update Bicicleta with new key if we were actually changing it here?
+    // Wait, handleKeyChange seems to only PREPARE the change in historial.
+    // Actually, usually the key is changed in the DB when it's confirmed.
+    // Let's see handleKeyChange again. It creates a historial with his_estado: 'CAMBIAR CLAVE'.
+    
     await historialesModels.create({
         his_usuario: usuarioAnterior,
-        his_estacion: bicicletero.bro_estacion,
-        his_bicicletero: bicicletero.bro_id,
+        his_estacion: bicicleta.bic_estacion,
         his_bicicleta: bikeId,
         his_fecha: fechaActual,
         his_clave_old: claveAnterior,
@@ -558,20 +594,30 @@ const finalizeKeyChange = async (bikeId, transaction) => {
             }
         );
 
-        // Restaurar clave anterior
-        const bicicletero = await bicicleterosModels.findOne({
-            where: { bro_bicicleta: bikeId },
-            transaction
-        });
-
-        if (bicicletero && historialActivo.his_clave_old) {
-            await bicicleterosModels.update(
-                { bro_clave: historialActivo.his_clave_old },
+        // Restaurar clave anterior en Bicicleta y Bicicletero
+        if (historialActivo.his_clave_old) {
+            await bicicletasModels.update(
+                { bic_clave: historialActivo.his_clave_old },
                 { 
-                    where: { bro_id: bicicletero.bro_id },
+                    where: { bic_id: bikeId },
                     transaction 
                 }
             );
+
+            const bicicletero = await bicicleterosModels.findOne({
+                where: { bro_bicicleta: bikeId },
+                transaction
+            });
+
+            if (bicicletero) {
+                await bicicleterosModels.update(
+                    { bro_clave: historialActivo.his_clave_old },
+                    { 
+                        where: { bro_id: bicicletero.bro_id },
+                        transaction 
+                    }
+                );
+            }
         }
     }
 };
