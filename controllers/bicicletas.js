@@ -249,6 +249,14 @@ const updateItem = async (req, res) => {
             updateData.bic_descripcion = body.bic_descripcion;
         }
 
+        if (body.bic_clave !== undefined) {
+            updateData.bic_clave = body.bic_clave;
+        }
+
+        if (body.bic_bluetooth !== undefined) {
+            updateData.bic_bluetooth = body.bic_bluetooth;
+        }
+
         const data = await bicicletasModels.update(updateData, {
             where: { bic_id: body.bic_id },
         });
@@ -1483,9 +1491,25 @@ const getReservaActivaPorBicicleta = async (req, res) => {
     }
 };
 
+const updateKey = async (req, res) => {
+    try {
+        const { bic_id, bic_clave } = req.body;
+        
+        await bicicletasModels.update({
+            bic_clave: bic_clave
+        }, {
+            where: { bic_id: bic_id }
+        });
+
+        res.send({ success: true, message: 'Key updated successfully in Bicicleta table' });
+    } catch (error) {
+        httpError(res, "ERROR_UPDATE_KEY_BICICLETA");
+    }
+};
+
 module.exports = {
     getItems, getItem, getItemNumero, getItemEstacion, getItemFlota, createItem, updateItem, deleteItem, getItems_cortezza, get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem,
     getBicisByEstacion,getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa,
     getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
-    getReservaActivaPorBicicleta
+    getReservaActivaPorBicicleta, updateKey
 }

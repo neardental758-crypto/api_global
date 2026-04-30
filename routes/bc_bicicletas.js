@@ -7,13 +7,15 @@ const { validatorCreateBicycle, validatorGetBicycle, validatorGetNombre,
 const { getItems, createItem, getItem, getItemEstacion, getItemFlota, updateItem, getItemNumero, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem, getItems_cortezza,
      get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getBicisByEstacion,
      getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa, getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
-     getReservaActivaPorBicicleta
+     getReservaActivaPorBicicleta, updateKey
 } = require('../controllers/bicicletas');
 const authMiddleware = require('../middleware/session');
 
 router.get("/", authMiddleware(["all"]), getItems);
 
 router.get("/bicicletero/", authMiddleware(["all"]), getItemsFilterToBicicleteros);
+
+router.post("/updateKey", authMiddleware(["all"]), updateKey);
 
 router.get("/id/:bic_id", authMiddleware(["all"]), validatorGetBicycle, getItem);
 

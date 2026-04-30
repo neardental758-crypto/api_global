@@ -1,10 +1,9 @@
 const { matchedData } = require('express-validator');
-const { historialesModels } = require('../models');
+const { historialesModels, bicicletasModels, bicicleterosModels } = require('../models');
 const { httpError } = require('../utils/handleError');
 const Estacion = require('../models/mysql/estacion');
 const Empresa = require('../models/mysql/empresa');
 const Bicicleta = require('../models/mysql/bicicletas');
-const { bicicleterosModels } = require("../models");
 const { sequelize } = require('../config/mysql');
 
 
@@ -74,11 +73,10 @@ const createItem = async (req, res) => {
     try {
         const { body } = req
         const data = await historialesModels.create(body)
-        res.status(200)
+        res.status(200).send({ data })
     } catch (error) {
         httpError(res, "ERROR_CREATE_HISTORIALES")
     }
-
 };
 
 const getItemLastTen = async (req, res) => {
