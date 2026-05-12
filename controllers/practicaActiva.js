@@ -9,8 +9,15 @@ const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 
 const getItems = async (req, res) => {
-    const filtro = JSON.parse(req.query.filter);
+    let filtro = {};
+    try {
+        filtro = req.query.filter ? JSON.parse(req.query.filter) : {};
+    } catch (e) {
+        return httpError(res, 'INVALID_FILTER_JSON', 400);
+    }
+    
     const organization = filtro.organizationId;
+    
     try {
         const data = await practicaActivaModels.findAll({
             where: {
@@ -30,13 +37,12 @@ const getItems = async (req, res) => {
                 include:[{
                     model: Empresa,
                     attributes: ['emp_id'],
-                    where : {
-                        emp_id : organization
-                    }
+                    where : organization ? { emp_id : organization } : {}
                   }],
-                required: true,
+                required: organization ? true : false,
             }],
-            order: [['practica_fecha', 'DESC']]
+            order: [['practica_fecha', 'DESC']],
+            limit: 500
         });
         res.send({data});
     } catch (error) {
