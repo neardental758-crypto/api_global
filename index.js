@@ -11,6 +11,7 @@ const app = express();
 const cron = require('./cron');
 const { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup } = require('./utils/cronJobs');
 const path = require('path');
+const { startLockTcpServer } = require('./services/lockTcpService');
 
 app.use(cors());
 app.use(express.json())
@@ -32,3 +33,4 @@ app.listen(port, () => {
 });
 
 dbConnectMysql();
+startLockTcpServer();

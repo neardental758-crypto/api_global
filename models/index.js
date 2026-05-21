@@ -603,8 +603,9 @@ if (MOTORDB === 'mysql') {
     Bicicleta.hasMany(RegistroPP, { foreignKey: 'vehiculo', sourceKey: 'bic_id', as: 'registros' });
 
 
-    //Nuevos    // Bicicleta.belongsTo(Candado, { foreignKey: 'can_id', targetKey: 'can_id' });
-    // Candado.hasOne(Bicicleta, { foreignKey: 'can_id', sourceKey: 'can_id' });
+    //Nuevos
+    Candado.belongsTo(Bicicleta, { foreignKey: 'can_bicicleta', as: 'bike' });
+    Bicicleta.hasOne(Candado, { foreignKey: 'can_bicicleta' });
 
     Usuario.belongsTo(UsuarioCredencial, { foreignKey: 'usu_documento', targetKey: 'uc_usuario_id' });
     UsuarioCredencial.hasOne(Usuario, { foreignKey: 'usu_documento', sourceKey: 'uc_usuario_id' });
