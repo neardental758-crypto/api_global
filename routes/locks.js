@@ -94,6 +94,8 @@ async function mapCandadoToFrontend(candado) {
         simNumber: json.can_numero_sim || "",
         lastCommandDate: json.can_fecha_ultimo_comando || null,
         lastCommand: json.can_ultimo_comando || "",
+        latitude: json.can_latitud !== undefined && json.can_latitud !== null ? parseFloat(json.can_latitud) : null,
+        longitude: json.can_longitud !== undefined && json.can_longitud !== null ? parseFloat(json.can_longitud) : null,
         bikeId: json.can_bicicleta || null,
         bike: null,
         organization: {
@@ -177,7 +179,7 @@ router.get("/count", authMiddleware(['all']), async (req, res) => {
         }
 
         // 3. Organization Filter
-        if (organizationId) {
+        if (organizationId && req.query.ignoreOrg !== 'true' && req.query.ignoreOrg !== true) {
             const company = await empresaModels.findOne({ where: { emp_id: organizationId } });
             if (company) {
                 const stations = await estacionModels.findAll({ where: { est_empresa: company.emp_nombre } });
@@ -249,7 +251,7 @@ router.get("/", authMiddleware(['all']), async (req, res) => {
         }
 
         // 3. Organization Filter
-        if (organizationId) {
+        if (organizationId && req.query.ignoreOrg !== 'true' && req.query.ignoreOrg !== true) {
             const company = await empresaModels.findOne({ where: { emp_id: organizationId } });
             if (company) {
                 const stations = await estacionModels.findAll({ where: { est_empresa: company.emp_nombre } });
