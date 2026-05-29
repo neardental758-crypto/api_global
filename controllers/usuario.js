@@ -677,7 +677,8 @@ const getUsersByOrganization = async (req, res) => {
                 ...whereClause,
                 [Op.or]: [
                     { usu_nombre: { [Op.like]: `%${search}%` } },
-                    { usu_documento: { [Op.like]: `%${search}%` } }
+                    { usu_documento: { [Op.like]: `%${search}%` } },
+                    { usu_email: { [Op.like]: `%${search}%` } }
                 ]
             };
         }

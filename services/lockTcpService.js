@@ -1,5 +1,5 @@
 const net = require('net');
-const { candadosModels } = require('../models');
+const { candadosModels, tarjetasNfcModels } = require('../models');
 
 // Mapa en memoria para almacenar las conexiones de sockets activas por IMEI
 const activeSockets = new Map();
@@ -80,6 +80,35 @@ async function handleLockMessage(socket, rawMessage) {
     } else {
         console.warn(`[LockTCP] IMEI inválido o ausente en el comando: "${imei}"`);
         return;
+    }
+
+    // Auto-creación de candado si no existe en la base de datos
+    try {
+        let candado = await candadosModels.findOne({ where: { can_imei: imei } });
+        if (!candado) {
+            console.log(`[LockTCP] Candado con IMEI ${imei} no existe. Creando registro automático...`);
+            const can_id = `can_${imei}`;
+            
+            candado = await candadosModels.create({
+                can_id: can_id,
+                can_imei: imei,
+                can_qr_numero: `QR-${imei.substring(9)}`, // Sugerido usando los últimos dígitos
+                can_mac: '',
+                can_numero_sim: '',
+                can_iccid: '',
+                can_estado_candado: 'closed',
+                can_bateria: 0,
+                can_senal: 0,
+                can_fecha_ultimo_comando: new Date(),
+                can_ultimo_comando: 'AUTO_CREATE',
+                can_bicicleta: null, // Asignar null si se permite, u otra forma
+                can_created_at: new Date(),
+                can_updated_at: new Date()
+            });
+            console.log(`[LockTCP] Registro de candado creado automáticamente con ID: ${can_id}`);
+        }
+    } catch (dbCreateErr) {
+        console.error(`[LockTCP] Error al auto-crear el candado con IMEI ${imei}:`, dbCreateErr.message);
     }
 
     console.log(`[LockTCP] Mensaje recibido del IMEI ${imei}: CMD=${commandCode} | Tramas: ${cleanMessage}`);
@@ -213,6 +242,79 @@ async function handleLockMessage(socket, rawMessage) {
                 await candadosModels.update({
                     can_fecha_ultimo_comando: new Date(),
                     can_ultimo_comando: `W0_alert_${alertType}`
+                }, {
+                    where: { can_imei: imei }
+                });
+                break;
+            }
+
+            case 'C0': {
+                // Solicitud de desbloqueo por tarjeta RFID swipeda en el candado:
+                // *CMDR,OM,<IMEI>,000000000000,C0,0,0,<RFID_HEX>#
+                const rfidHex = receivedItems[7] ? receivedItems[7].trim().toUpperCase() : null;
+                console.log(`[LockTCP] [C0 - Solicitud de Apertura RFID] IMEI: ${imei} | RFID Hex: ${rfidHex}`);
+
+                if (!rfidHex) {
+                    console.warn(`[LockTCP] [C0] No se recibió RFID_HEX en la trama.`);
+                    break;
+                }
+
+                // 1. Validar la tarjeta en la base de datos (debe estar activa)
+                // Hacemos la consulta extremadamente robusta quitando ceros iniciales y caracteres especiales
+                const { Op } = require('sequelize');
+                const cleanRfidHex = rfidHex.replace(/[^A-Fa-f0-9]/g, '').toUpperCase().replace(/^0+/, '');
+
+                const tarjeta = await tarjetasNfcModels.findOne({
+                    where: {
+                        tnfc_estado: 'Active',
+                        [Op.or]: [
+                            { tnfc_id_hexadecimal: rfidHex },
+                            { tnfc_id_hexadecimal: cleanRfidHex },
+                            { tnfc_id_hexadecimal: { [Op.like]: `%${cleanRfidHex}` } }
+                        ]
+                    }
+                });
+
+                if (!tarjeta) {
+                    console.warn(`[LockTCP] [C0] Tarjeta RFID ${rfidHex} no encontrada o inactiva en el sistema.`);
+                    break;
+                }
+
+                console.log(`[LockTCP] [C0] Tarjeta RFID ${rfidHex} válida. Usuario asociado: ${tarjeta.tnfc_usuario_id}`);
+
+                // 2. Disparar el comando L0 para desbloquear el candado
+                const timestamp = Math.floor(Date.now() / 1000);
+                const unlockCommand = `*CMDS,OM,${imei},000000000000,L0,0,0,${timestamp}#\n`;
+                
+                const sent = sendToLock(socket, unlockCommand);
+                if (sent) {
+                    console.log(`[LockTCP] [C0] Comando L0 enviado exitosamente para IMEI ${imei} tras swipe de tarjeta RFID.`);
+                    // 3. Registrar en DB el comando de apertura disparado por RFID
+                    await candadosModels.update({
+                        can_fecha_ultimo_comando: new Date(),
+                        can_ultimo_comando: `C0_RFID_unlock_${rfidHex}`
+                    }, {
+                        where: { can_imei: imei }
+                    });
+                } else {
+                    console.error(`[LockTCP] [C0] Error al enviar comando L0 tras swipe de tarjeta RFID.`);
+                }
+                break;
+            }
+
+            case 'I0': {
+                // Get SIM ICCID: *CMDR,OM,<IMEI>,<time>,I0,<iccid>#
+                const iccid = receivedItems[5] ? receivedItems[5].trim() : '';
+                console.log(`[LockTCP] [I0 - ICCID] IMEI: ${imei} | ICCID: ${iccid}`);
+
+                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,I0#\n
+                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,I0#\n`;
+                sendToLock(socket, ackCmd);
+
+                await candadosModels.update({
+                    can_iccid: iccid,
+                    can_fecha_ultimo_comando: new Date(),
+                    can_ultimo_comando: 'I0'
                 }, {
                     where: { can_imei: imei }
                 });

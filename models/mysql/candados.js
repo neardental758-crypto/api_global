@@ -38,6 +38,9 @@ const Candado = sequelize.define(
         can_numero_sim: {
             type: DataTypes.STRING(50),
         },
+        can_iccid: {
+            type: DataTypes.STRING(50),
+        },
         can_fecha_ultimo_comando: {
             type: DataTypes.DATE,
         },

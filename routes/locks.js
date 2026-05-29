@@ -310,4 +310,99 @@ router.get("/", authMiddleware(['all']), async (req, res) => {
     }
 });
 
+// POST /api/locks (Manual Create)
+router.post("/", authMiddleware(['all']), async (req, res) => {
+    try {
+        const body = req.body;
+        
+        // Generate can_id if not present (using 'can_' prefix + IMEI)
+        const can_id = body.id || `can_${body.imei}`;
+
+        const newLockData = {
+            can_id: can_id,
+            can_imei: body.imei,
+            can_qr_numero: body.qrNumber || "",
+            can_mac: body.mac || "",
+            can_numero_sim: body.simNumber || "",
+            can_iccid: body.iccid || "",
+            can_estado_candado: body.lockStatus || "closed",
+            can_bateria: body.battery ? parseInt(body.battery, 10) : 0,
+            can_senal: body.signal ? parseInt(body.signal, 10) : 0,
+            can_bicicleta: body.bikeId || null,
+            can_created_at: new Date(),
+            can_updated_at: new Date()
+        };
+
+        const candado = await candadosModels.create(newLockData);
+        const mapped = await mapCandadoToFrontend(candado);
+        res.status(201).send(mapped);
+    } catch (error) {
+        console.error("Error creating lock:", error);
+        res.status(500).send({ error: error.message });
+    }
+});
+
+// PATCH /api/locks/:id (Manual Update/Edit)
+router.patch("/:id", authMiddleware(['all']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const body = req.body;
+
+        const candado = await candadosModels.findByPk(id);
+        if (!candado) {
+            return res.status(404).send({ error: "Candado no encontrado" });
+        }
+
+        // Map frontend expected attributes to db columns
+        const updateData = {};
+        if (body.imei !== undefined) updateData.can_imei = body.imei;
+        if (body.qrNumber !== undefined) updateData.can_qr_numero = body.qrNumber;
+        if (body.mac !== undefined) updateData.can_mac = body.mac;
+        if (body.simNumber !== undefined) updateData.can_numero_sim = body.simNumber;
+        if (body.iccid !== undefined) updateData.can_iccid = body.iccid;
+        if (body.lockStatus !== undefined) updateData.can_estado_candado = body.lockStatus;
+        if (body.battery !== undefined) updateData.can_bateria = parseInt(body.battery, 10) || 0;
+        if (body.signal !== undefined) updateData.can_senal = parseInt(body.signal, 10) || 0;
+        if (body.bikeId !== undefined) updateData.can_bicicleta = body.bikeId;
+
+        updateData.can_updated_at = new Date();
+
+        await candadosModels.update(updateData, {
+            where: { can_id: id }
+        });
+
+        const updatedCandado = await candadosModels.findByPk(id, {
+            include: {
+                model: bicicletasModels,
+                as: 'bike'
+            }
+        });
+        const mapped = await mapCandadoToFrontend(updatedCandado);
+        res.send(mapped);
+    } catch (error) {
+        console.error("Error updating lock:", error);
+        res.status(500).send({ error: error.message });
+    }
+});
+
+// DELETE /api/locks/:id (Manual Delete)
+router.delete("/:id", authMiddleware(['all']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const candado = await candadosModels.findByPk(id);
+        if (!candado) {
+            return res.status(404).send({ error: "Candado no encontrado" });
+        }
+
+        await candadosModels.destroy({
+            where: { can_id: id }
+        });
+
+        res.send({ message: "Candado eliminado exitosamente" });
+    } catch (error) {
+        console.error("Error deleting lock:", error);
+        res.status(500).send({ error: error.message });
+    }
+});
+
 module.exports = router;

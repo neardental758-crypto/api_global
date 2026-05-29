@@ -39,22 +39,23 @@ const convertWhereOperators = (where) => {
 
     const out = {};
     Object.keys(where).forEach((key) => {
+        const mappedKey = orderFieldMap[key] || key;
         const value = where[key];
         if (value && typeof value === 'object' && !Array.isArray(value)) {
             if (Object.prototype.hasOwnProperty.call(value, 'eq')) {
-                out[key] = value.eq;
+                out[mappedKey] = value.eq;
                 return;
             }
             if (Object.prototype.hasOwnProperty.call(value, 'inq')) {
-                out[key] = { [Op.in]: value.inq };
+                out[mappedKey] = { [Op.in]: value.inq };
                 return;
             }
             if (Object.prototype.hasOwnProperty.call(value, 'like')) {
-                out[key] = { [Op.like]: value.like };
+                out[mappedKey] = { [Op.like]: value.like };
                 return;
             }
         }
-        out[key] = value;
+        out[mappedKey] = value;
     });
 
     return out;
@@ -223,6 +224,24 @@ const updateItem = async (req, res) => {
         const tarjeta = await tarjetasNfcModels.findByPk(tnfc_id);
         if (!tarjeta) {
             return res.status(404).send({ error: "Tarjeta NFC no encontrada" });
+        }
+
+        // Map camelCase fields to model keys
+        if (body.userId !== undefined) {
+            body.tnfc_usuario_id = body.userId;
+            delete body.userId;
+        }
+        if (body.cardNumber !== undefined) {
+            body.tnfc_numero_tarjeta = body.cardNumber;
+            delete body.cardNumber;
+        }
+        if (body.hexadecimalId !== undefined) {
+            body.tnfc_id_hexadecimal = body.hexadecimalId;
+            delete body.hexadecimalId;
+        }
+        if (body.state !== undefined) {
+            body.tnfc_estado = body.state;
+            delete body.state;
         }
 
         body.tnfc_updated_at = new Date();
