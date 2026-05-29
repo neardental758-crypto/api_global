@@ -82,3 +82,9 @@ pm2 status api-monteria
 # Mostrar los últimos 15 logs para verificar inicio exitoso
 echo -e "\n${YELLOW}=== Mostrando últimas 15 líneas de logs de la API (Presiona Ctrl+C para salir) ===${NC}\n"
 pm2 logs api-monteria --lines 15 --no-daemon
+
+
+#ejecutar deploy automatico
+## chmod +x deploy.sh
+### ./deploy.sh 
+#### sudo ./deploy.sh
