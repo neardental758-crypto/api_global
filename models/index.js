@@ -67,6 +67,7 @@ const UsuarioPermiso = require('./mysql/usuariosPermiso');
 const UsuarioRol = require('./mysql/usuariosRoles');
 const Permiso = require('./mysql/permisos');
 const TarjetaNfc = require('./mysql/tarjetasNfc');
+const Penalizacion = require('./mysql/penalizacion');
 
 const MOTORDB = process.env.MOTORDB;
 
@@ -88,6 +89,7 @@ if (MOTORDB === 'mysql') {
         bicicleterosModels: require('./mysql/bicicleteros'),
         horariosModels: require('./mysql/horarios'),
         penalizacionModels: require('./mysql/penalizacion'),
+        tipoPenalizacionModels: require('./mysql/tipoPenalizacion'),
         estadosModels: require('./mysql/estados'),
         historialesModels: require('./mysql/historiales'),
         puntosModels: require('./mysql/puntos'),
@@ -630,6 +632,9 @@ if (MOTORDB === 'mysql') {
 
     TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento', as: 'user' });
     Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento', as: 'nfcCards' });
+
+    Usuario.hasMany(Penalizacion, { foreignKey: 'pen_usuario', sourceKey: 'usu_documento', as: 'penalizaciones' });
+    Penalizacion.belongsTo(Usuario, { foreignKey: 'pen_usuario', targetKey: 'usu_documento', as: 'usuario' });
 
 
     module.exports = models

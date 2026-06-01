@@ -18,6 +18,12 @@ const sequelize = new Sequelize(
         define: {
             timestamps: false, //la marca de tiempo en false para que no la tome en ningún modelo (createdAt, updatedAt)
             freezeTableName: true, //congela el nombre de la tabla y no le agrega el plural
+        },
+        pool: {
+            max: 3,             // Reduce max active connections to prevent resource usage spikes
+            min: 0,             // Do not keep connections open when idle
+            acquire: 30000,     // Timeout in ms to acquire connection
+            idle: 5000          // Close connection if idle for 5 seconds to reduce count
         }
     }
 )

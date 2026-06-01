@@ -13,6 +13,7 @@ const { sequelize } = require('../config/mysql');
 const { QueryTypes } = require('sequelize');
 const _id_cortezza = '627a8c9931feb31c33377d0e';
 const UsuarioEmpresas = require('../models/mysql/usuarios_empresas');
+const Penalizacion = require('../models/mysql/penalizacion');
 const nodemailer = require("nodemailer");
 const { Op } = require('sequelize');
 const { randomUUID } = require('crypto');
@@ -386,6 +387,14 @@ const createUserComplete = async (req, res) => {
                     : 0
                 : 1;
         const cargo = body && body.position ? String(body.position) : "";
+        
+        // Encriptar contraseña si viene en la petición (para bc_usuarios.usu_password)
+        const passwordRaw = body.usu_password || body.password;
+        let passwordHash = null;
+        if (passwordRaw) {
+            passwordHash = await encrypt(String(passwordRaw));
+        }
+
         let cargoDireccionValida = null;
         try {
             cargoDireccionValida = await resolveEstacionDireccionOrThrow(cargo, transaction);
@@ -402,6 +411,7 @@ const createUserComplete = async (req, res) => {
             usu_documento: body.idNumber,
             usu_nombre: fullName || body.nombre,
             usu_email: email,
+            usu_password: passwordHash, // Guardar contraseña encriptada
             usu_empresa: empresa.emp_nombre, // Nombre exacto de la empresa
             usu_ciudad: "Dashboard",
             usu_habilitado: habilitado,
@@ -720,6 +730,12 @@ const getUsersByOrganization = async (req, res) => {
                 model: Agendados,
                 as: 'Agenda',
                 where: { agendado_resultado: 'APROBADO' },
+                required: false
+            },
+            {
+                model: Penalizacion,
+                as: 'penalizaciones',
+                where: { pen_estado: 'ACTIVA' },
                 required: false
             }
         ];
