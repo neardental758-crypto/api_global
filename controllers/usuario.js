@@ -253,7 +253,7 @@ const createItem = async (req, res) => {
         // 4. Crear rol de usuario en bc_usuarios_roles
         // Limpiamos cualquier rol huérfano previo para evitar errores de llave única
         await UsuarioRol.destroy({ where: { ur_usuario_id: usu_documento }, transaction });
-        
+
         const rolData = {
             ur_id: randomUUID(),
             ur_usuario_id: usu_documento,
@@ -268,7 +268,7 @@ const createItem = async (req, res) => {
         res.send('ok');
     } catch (error) {
         if (transaction) await transaction.rollback();
-        
+
         let detail = error.message;
         if (error.errors && Array.isArray(error.errors)) {
             detail = error.errors.map(e => `${e.path}: ${e.message}`).join(', ');
@@ -918,8 +918,8 @@ const getItems_cortezza = async (req, res) => {
 };
 
 // 🔹 controlador resetPassword
-const MAIL_USER = 'esteban@bicyclecapital.co'; // tu correo en .env
-const MAIL_PASS = 'thvu hmvg dxmn gibx';
+const MAIL_USER = 'contacto@bicyclecapital.co'; // tu correo en .env
+const MAIL_PASS = 'cfgp eoer gfsk xsfm';
 
 // 🔹 controlador resetPassword
 const MAIL_USER_MEB = 'experiencia@mejorenbici.com'; // tu correo en .env
