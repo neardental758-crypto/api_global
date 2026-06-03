@@ -918,27 +918,50 @@ const getItems_cortezza = async (req, res) => {
 };
 
 // 🔹 controlador resetPassword
-const MAIL_USER = 'Servicio@bicyclecapital.co'; // tu correo en .env
-const MAIL_PASS = 'fyam ecci wqby fhaj';
+const MAIL_USER = 'esteban@bicyclecapital.co'; // tu correo en .env
+const MAIL_PASS = 'thvu hmvg dxmn gibx';
 
+// 🔹 controlador resetPassword
+const MAIL_USER_MEB = 'experiencia@mejorenbici.com'; // tu correo en .env
+const MAIL_PASS_MEB = 'himq ialw wyvh mrdq';
 
-const correo__password_ride = async (req, res) => {
-    console.log('ENTRANDO A enviar correo desde la api')
+const enviarCorreoGenerico = async (email, password, fallbackApp = 'ride') => {
     try {
-        const { email, password } = req.body; // viene del frontend
+        if (!email) throw new Error('Email is required');
+
+        // Buscar el usuario para saber a qué empresa pertenece
+        const user = await usuarioModels.findOne({
+            where: { usu_email: email.toLowerCase().trim() }
+        });
+
+        let appToUse = fallbackApp;
+        if (user && user.usu_empresa) {
+            // Buscar la empresa para ver qué aplicación utiliza
+            const empresa = await empresaModels.findOne({
+                where: { emp_nombre: user.usu_empresa }
+            });
+            if (empresa && empresa.aplicacion) {
+                appToUse = empresa.aplicacion.toLowerCase().trim();
+            }
+        }
+
+        const useMeb = appToUse === 'meb';
+        const activeMailUser = useMeb ? MAIL_USER_MEB : MAIL_USER;
+        const activeMailPass = useMeb ? MAIL_PASS_MEB : MAIL_PASS;
+        const displayName = useMeb ? "Soporte MEB" : "Soporte RIDE";
 
         // configurar transporte SMTP con Gmail
         const transporter = nodemailer.createTransport({
             service: "gmail",
             auth: {
-                user: MAIL_USER, // tu correo en .env
-                pass: MAIL_PASS, // tu clave de aplicación Gmail
+                user: activeMailUser,
+                pass: activeMailPass,
             },
         });
 
         // enviar correo al usuario
         await transporter.sendMail({
-            from: `"Soporte RIDE" <${MAIL_USER}>`,
+            from: `"${displayName}" <${activeMailUser}>`,
             to: email,
             subject: "Recuperación de contraseña",
             html: `
@@ -947,46 +970,33 @@ const correo__password_ride = async (req, res) => {
       `,
         });
 
+        return { success: true };
+    } catch (error) {
+        console.error("Error al enviar correo en enviarCorreoGenerico:", error);
+        throw error;
+    }
+};
+
+const correo__password_ride = async (req, res) => {
+    console.log('ENTRANDO A enviar correo desde la api (RIDE / DYNAMIC)')
+    try {
+        const { email, password } = req.body; // viene del frontend
+        await enviarCorreoGenerico(email, password, 'ride');
         return res.json({ message: "Contraseña temporal enviada al correo." });
     } catch (error) {
-        console.error("Error en correo__password:", error);
+        console.error("Error en correo__password_ride:", error);
         return res.status(500).json({ error: "Error al enviar correo" });
     }
 };
 
-// 🔹 controlador resetPassword
-const MAIL_USER_MEB = 'experiencia@mejorenbici.com'; // tu correo en .env
-const MAIL_PASS_MEB = 'udtl ydrk pvyf oiev';
-
-
 const correo__password_meb = async (req, res) => {
-    console.log('ENTRANDO A enviar correo desde la api')
+    console.log('ENTRANDO A enviar correo desde la api (MEB / DYNAMIC)')
     try {
         const { email, password } = req.body; // viene del frontend
-
-        // configurar transporte SMTP con Gmail
-        const transporter = nodemailer.createTransport({
-            service: "gmail",
-            auth: {
-                user: MAIL_USER_MEB, // tu correo en .env
-                pass: MAIL_PASS_MEB, // tu clave de aplicación Gmail
-            },
-        });
-
-        // enviar correo al usuario
-        await transporter.sendMail({
-            from: `"Soporte MEB" <${MAIL_USER_MEB}>`,
-            to: email,
-            subject: "Recuperación de contraseña",
-            html: `
-        <p>Hola,</p>
-        <p>Tu nueva contraseña es: <strong>${password}</strong></p>
-      `,
-        });
-
+        await enviarCorreoGenerico(email, password, 'meb');
         return res.json({ message: "Contraseña temporal enviada al correo." });
     } catch (error) {
-        console.error("Error en correo__password:", error);
+        console.error("Error en correo__password_meb:", error);
         return res.status(500).json({ error: "Error al enviar correo" });
     }
 };
