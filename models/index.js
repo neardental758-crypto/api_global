@@ -607,7 +607,7 @@ if (MOTORDB === 'mysql') {
 
     //Nuevos
     Candado.belongsTo(Bicicleta, { foreignKey: 'can_bicicleta', as: 'bike' });
-    Bicicleta.hasOne(Candado, { foreignKey: 'can_bicicleta' });
+    Bicicleta.hasOne(Candado, { foreignKey: 'can_bicicleta', as: 'lock' });
 
     Usuario.belongsTo(UsuarioCredencial, { foreignKey: 'usu_documento', targetKey: 'uc_usuario_id' });
     UsuarioCredencial.hasOne(Usuario, { foreignKey: 'usu_documento', sourceKey: 'uc_usuario_id' });
