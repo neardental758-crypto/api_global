@@ -47,7 +47,22 @@ const convertWhereOperators = (where) => {
                 return;
             }
             if (Object.prototype.hasOwnProperty.call(value, 'inq')) {
-                out[mappedKey] = { [Op.in]: value.inq };
+                const list = value.inq;
+                const hasNull = list.some(x => x === null || x === undefined);
+                const nonNullList = list.filter(x => x !== null && x !== undefined);
+                if (hasNull) {
+                    if (nonNullList.length > 0) {
+                        out[Op.or] = out[Op.or] || [];
+                        out[Op.or].push(
+                            { [mappedKey]: { [Op.in]: nonNullList } },
+                            { [mappedKey]: null }
+                        );
+                    } else {
+                        out[mappedKey] = null;
+                    }
+                } else {
+                    out[mappedKey] = { [Op.in]: list };
+                }
                 return;
             }
             if (Object.prototype.hasOwnProperty.call(value, 'like')) {
