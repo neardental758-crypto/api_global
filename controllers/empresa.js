@@ -262,7 +262,7 @@ const getItemByName = async (req, res) => {
       where: {
         emp_nombre: emp_nombre
       },
-      attributes: ['emp_id', 'emp_nombre'] // Solo retornamos id y nombre
+      attributes: ['emp_id', 'emp_nombre', '_carro_compartido'] // Solo retornamos id, nombre y _carro_compartido
     });
 
     if (data) {

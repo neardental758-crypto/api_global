@@ -5,7 +5,7 @@ const MOTORDB = process.env.MOTORDB;
 
 if (MOTORDB === 'mysql'){
     const validatorCreateTarjeta = [
-        check("tnfc_numero_tarjeta").exists().notEmpty().isNumeric(),
+        check("tnfc_numero_tarjeta").exists().notEmpty(),
         check("tnfc_id_hexadecimal").exists().notEmpty(),
         (req, res, next) => {
             return validateResults(req, res, next);

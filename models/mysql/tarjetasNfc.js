@@ -9,7 +9,7 @@ const TarjetaNfc = sequelize.define(
             primaryKey: true
         },
         tnfc_numero_tarjeta: {
-            type: DataTypes.INTEGER,
+            type: DataTypes.STRING(100),
         },
         tnfc_id_hexadecimal: {
             type: DataTypes.STRING(50),
