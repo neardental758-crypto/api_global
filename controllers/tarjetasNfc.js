@@ -69,6 +69,15 @@ const convertWhereOperators = (where) => {
                 out[mappedKey] = { [Op.like]: value.like };
                 return;
             }
+            if (Object.prototype.hasOwnProperty.call(value, 'neq')) {
+                const neqVal = value.neq;
+                if (neqVal === null || neqVal === undefined) {
+                    out[mappedKey] = { [Op.not]: null };
+                } else {
+                    out[mappedKey] = { [Op.ne]: neqVal };
+                }
+                return;
+            }
         }
         out[mappedKey] = value;
     });
