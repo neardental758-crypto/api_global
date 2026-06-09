@@ -1879,6 +1879,22 @@ const getItemPrestamosUsuario_cortezza = async (req, res) => {
 //   }
 // };
 
+const getPrestamoRuta = async (req, res) => {
+  try {
+    const { pre_id } = req.params;
+    const { prestamosRutaModels } = require('../models');
+    const data = await prestamosRutaModels.findOne({
+      where: { pr_prestamo_id: pre_id }
+    });
+    if (!data) {
+      return res.status(200).send({ success: true, data: { pr_ruta: "[]" } });
+    }
+    res.send({ success: true, data });
+  } catch (e) {
+    httpError(res, `Error obteniendo ruta del prestamo: ${e.message}`);
+  }
+};
+
 
 module.exports = {
   getItems, getItem, getItemUsuario, createItem, updateItem, deleteItem, getItemPrestamoActivo, getItemPrestamoActivoPP,
@@ -1886,5 +1902,5 @@ module.exports = {
   getItemAllPrestamoFinalizados3g, getItemAllPrestamoFinalizados4g, patchItem,
   getItemByBicicleta, getItem_cortezza, getItems_cortezza, getItemAllPrestamoActivos_cortezza,
   getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza, getItemPrestamosUsuario_cortezza,
-  getItemsForReports, getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, getItemsForReportsByStation, finalizeLoan, finalizeLoan4g, finalizeLoan5g
+  getItemsForReports, getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, getItemsForReportsByStation, finalizeLoan, finalizeLoan4g, finalizeLoan5g, getPrestamoRuta
 }

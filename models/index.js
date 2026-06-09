@@ -58,6 +58,7 @@ const compartidoSolicitudNoEncontrada = require('./mysql/compartidoSolicitudNoEn
 const AgendamientoOperario = require('./mysql/agendamientos_operarios');
 const AgendamientoIncumplido = require('./mysql/agendamientos_incumplidos');
 const RegistroPP = require('./mysql/registrospp');
+const PrestamosRuta = require('./mysql/prestamosRuta');
 
 const Candado = require('./mysql/candados');
 const Rol = require('./mysql/roles');
@@ -156,6 +157,7 @@ if (MOTORDB === 'mysql') {
         usuariosRolesModels: require('./mysql/usuariosRoles'),
         permisosModels: require('./mysql/permisos'),
         tarjetasNfcModels: require('./mysql/tarjetasNfc'),
+        prestamosRutaModels: require('./mysql/prestamosRuta'),
     };
 
     Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
@@ -346,6 +348,15 @@ if (MOTORDB === 'mysql') {
         foreignKey: 'pre_id',
         targetKey: 'com_prestamo',
         as: 'comentarios'
+    });
+
+    Prestamos.hasOne(PrestamosRuta, {
+        foreignKey: 'pr_prestamo_id',
+        as: 'ruta'
+    });
+    PrestamosRuta.belongsTo(Prestamos, {
+        foreignKey: 'pr_prestamo_id',
+        as: 'prestamo'
     });
     //
     Bicicleta.belongsTo(Estacion, { foreignKey: 'bic_estacion', targetKey: 'est_estacion' });

@@ -6,7 +6,7 @@ const { getItems, createItem, getItem, getItemPrestamoActivo, getItemPrestamoAct
     getItemAllPrestamoFinalizados4g, patchItem, getItem_cortezza, getItems_cortezza, getMetricsForOrganization,
     getItemAllPrestamoActivos_cortezza, getItemAllPrestamoFinalizados_cortezza, getItemPrestamoActivo_cortezza,
     getItemPrestamosUsuario_cortezza, getItemByBicicleta, getItemsForReports, getItemsForReportsByStation,
-    getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, finalizeLoan, finalizeLoan4g, finalizeLoan5g } = require('../controllers/prestamos');
+    getItemsForReportsByOrganization, getItemsForReportsByOrganization5g, finalizeLoan, finalizeLoan4g, finalizeLoan5g, getPrestamoRuta } = require('../controllers/prestamos');
 const authMiddleware = require('../middleware/session');
 const checkPrestamoActivo = require("../middleware/checkPrestamoActivo");
 
@@ -42,6 +42,7 @@ router.get("/bicicleta/:bic_id", authMiddleware(["all"]), getItemByBicicleta);
 router.post("/updateEstado", authMiddleware(["all"]), validatorGetPrestamos, updateItem);
 router.patch("/:pre_id", authMiddleware(["all"]), validatorGetPrestamos, patchItem);
 router.put("/updateState", authMiddleware(["all"]), validatorGetPrestamos, updateItem);
+router.get("/ruta/:pre_id", authMiddleware(["all"]), validatorGetPrestamos, getPrestamoRuta);
 
 router.get("/reports", authMiddleware(["all"]), getItemsForReports);
 router.get("/reports/organization/:organizationId", authMiddleware(["all"]), validatorOrganizationId, getItemsForReportsByOrganization);

@@ -1,5 +1,5 @@
 const net = require('net');
-const { candadosModels, tarjetasNfcModels } = require('../models');
+const { candadosModels, tarjetasNfcModels, prestamosModels, prestamosRutaModels } = require('../models');
 
 // Mapa en memoria para almacenar las conexiones de sockets activas por IMEI
 const activeSockets = new Map();
@@ -225,6 +225,62 @@ async function handleLockMessage(socket, rawMessage) {
                     }, {
                         where: { can_imei: imei }
                     });
+
+                    // 1. Buscar el candado para obtener la bicicleta asignada
+                    const candadoObj = await candadosModels.findOne({ where: { can_imei: imei } });
+                    if (candadoObj && candadoObj.can_bicicleta) {
+                        // 2. Buscar si hay un viaje activo para esta bicicleta
+                        const activeTrip = await prestamosModels.findOne({
+                            where: {
+                                pre_bicicleta: candadoObj.can_bicicleta,
+                                pre_estado: 'ACTIVA',
+                                pre_modulo: '5g'
+                            }
+                        });
+
+                        if (activeTrip) {
+                            // 3. Buscar si ya existe un registro de ruta para este préstamo
+                            let prestamoRuta = await prestamosRutaModels.findOne({
+                                where: { pr_prestamo_id: activeTrip.pre_id }
+                            });
+
+                            let currentCoords = [];
+                            if (prestamoRuta && prestamoRuta.pr_ruta) {
+                                try {
+                                    currentCoords = JSON.parse(prestamoRuta.pr_ruta);
+                                } catch (e) {
+                                    console.error('[LockTCP] Error parsing pr_ruta JSON:', e.message);
+                                }
+                            }
+
+                            // Añadir la nueva coordenada
+                            const newCoord = {
+                                latitude: latDecimal,
+                                longitude: lonDecimal,
+                                timestamp: new Date().toISOString()
+                            };
+
+                            // Evitar duplicar la misma coordenada consecutivamente
+                            const lastCoord = currentCoords[currentCoords.length - 1];
+                            if (!lastCoord || lastCoord.latitude !== latDecimal || lastCoord.longitude !== lonDecimal) {
+                                currentCoords.push(newCoord);
+
+                                if (prestamoRuta) {
+                                    await prestamosRutaModels.update({
+                                        pr_ruta: JSON.stringify(currentCoords)
+                                    }, {
+                                        where: { pr_id: prestamoRuta.pr_id }
+                                    });
+                                } else {
+                                    await prestamosRutaModels.create({
+                                        pr_prestamo_id: activeTrip.pre_id,
+                                        pr_ruta: JSON.stringify(currentCoords)
+                                    });
+                                }
+                                console.log(`[LockTCP] Ruta actualizada para viaje 5G ID: ${activeTrip.pre_id} | Total puntos: ${currentCoords.length}`);
+                            }
+                        }
+                    }
                 }
                 break;
             }
