@@ -38,7 +38,50 @@ const Bicicleta = sequelize.define(
         }
     },
     {
-        timestamps: false
+        timestamps: false,
+        hooks: {
+            afterUpdate: async (instance, options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        io.emit('bike_update', instance.toJSON());
+                    }
+                } catch (err) {
+                    console.error('Error emitting bike_update in afterUpdate hook:', err.message);
+                }
+            },
+            afterSave: async (instance, options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        io.emit('bike_update', instance.toJSON());
+                    }
+                } catch (err) {
+                    console.error('Error emitting bike_update in afterSave hook:', err.message);
+                }
+            },
+            afterBulkUpdate: async (options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        const BicicletaModel = sequelize.models.bc_bicicletas;
+                        if (BicicletaModel && options.where) {
+                            const updatedBikes = await BicicletaModel.findAll({
+                                where: options.where
+                            });
+                            for (const bike of updatedBikes) {
+                                io.emit('bike_update', bike.toJSON());
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error emitting bike_update in afterBulkUpdate hook:', err.message);
+                }
+            }
+        }
     }
 );
 
