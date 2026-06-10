@@ -19,6 +19,13 @@ app.use(express.static("storage"))
 // Expose the static resized images folder for React Native
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
+const http = require('http');
+const { initSocketIo } = require('./services/socketIoService');
+const server = http.createServer(app);
+
+// Inicializar Socket.io para tiempo real con el dashboard
+initSocketIo(server);
+
 const port = process.env.API_PORT || process.env.PORT || 3002;
 cron;
 startSessionCleanup();
@@ -28,8 +35,8 @@ startReservationsCleanup();
 //RUTAS
 app.use("/api", require("./routes/"));
 
-app.listen(port, () => {
-    console.log(`🚀 API lista por el puerto: ${port}`);
+server.listen(port, () => {
+    console.log(`🚀 API + Sockets listos por el puerto: ${port}`);
 });
 
 dbConnectMysql();

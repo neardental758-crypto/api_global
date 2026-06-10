@@ -1,5 +1,65 @@
 const net = require('net');
-const { candadosModels, tarjetasNfcModels, prestamosModels, prestamosRutaModels } = require('../models');
+const { candadosModels, tarjetasNfcModels, prestamosModels, prestamosRutaModels, bicicletasModels, estacionModels, empresaModels } = require('../models');
+
+/**
+ * Mapea el candado de la base de datos MySQL a la estructura Loopback JSON esperada por el Frontend Angular
+ */
+async function mapCandadoToFrontend(candado) {
+    const json = candado.toJSON ? candado.toJSON() : candado;
+    
+    const mapped = {
+        id: json.can_id,
+        imei: json.can_imei,
+        qrNumber: json.can_qr_numero || "",
+        mac: json.can_mac || "",
+        battery: json.can_bateria !== undefined ? String(json.can_bateria) : "0",
+        lockStatus: json.can_estado_candado || "closed",
+        signal: json.can_senal !== undefined ? String(json.can_senal) : "0",
+        simNumber: json.can_numero_sim || "",
+        lastCommandDate: json.can_fecha_ultimo_comando || null,
+        lastCommand: json.can_ultimo_comando || "",
+        latitude: json.can_latitud !== undefined && json.can_latitud !== null ? parseFloat(json.can_latitud) : null,
+        longitude: json.can_longitud !== undefined && json.can_longitud !== null ? parseFloat(json.can_longitud) : null,
+        bikeId: json.can_bicicleta || null,
+        bike: null,
+        organization: {
+            id: "",
+            name: "Ninguna"
+        }
+    };
+
+    if (json.bike) {
+        mapped.bike = {
+            id: json.bike.bic_id,
+            nombre: json.bike.bic_nombre,
+            number: json.bike.bic_numero,
+            estacion: json.bike.bic_estacion,
+            estado: json.bike.bic_estado,
+            descripcion: json.bike.bic_descripcion
+        };
+
+        if (json.bike.bic_estacion) {
+            try {
+                const station = await estacionModels.findOne({
+                    where: { est_estacion: json.bike.bic_estacion }
+                });
+                if (station && station.est_empresa) {
+                    mapped.organization.name = station.est_empresa;
+                    const company = await empresaModels.findOne({
+                        where: { emp_nombre: station.est_empresa }
+                    });
+                    if (company) {
+                        mapped.organization.id = company.emp_id;
+                    }
+                }
+            } catch (err) {
+                console.error("Error retrieving company/station for lock mapping in lockTcpService:", err);
+            }
+        }
+    }
+
+    return mapped;
+}
 
 // Mapa en memoria para almacenar las conexiones de sockets activas por IMEI
 const activeSockets = new Map();
@@ -386,6 +446,26 @@ async function handleLockMessage(socket, rawMessage) {
         }
     } catch (dbErr) {
         console.error(`[LockTCP] Error al interactuar con MySQL para IMEI ${imei}:`, dbErr.message);
+    }
+
+    // Emitir actualización por Socket.io en tiempo real para el Dashboard
+    try {
+        const io = require('./socketIoService').getIo();
+        if (io) {
+            const updatedCandado = await candadosModels.findOne({
+                where: { can_imei: imei },
+                include: {
+                    model: bicicletasModels,
+                    as: 'bike'
+                }
+            });
+            if (updatedCandado) {
+                const mapped = await mapCandadoToFrontend(updatedCandado);
+                io.emit('lock_update', mapped);
+            }
+        }
+    } catch (socketIoErr) {
+        console.error('[LockTCP] Error al emitir actualización vía Socket.io:', socketIoErr.message);
     }
 }
 
