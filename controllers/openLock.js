@@ -37,9 +37,10 @@ const openLockByImei = async (req, res) => {
         const timestamp = Math.floor(Date.now() / 1000);
 
         // 4. Construir el comando L0 según el protocolo:
-        // *CMDS,OM,<IMEI>,000000000000,L0,<resetTimer>,<userID>,<timestamp>#\n
+        // *CMDS,<deviceCode>,<IMEI>,000000000000,L0,<resetTimer>,<userID>,<timestamp>#\n
         // resetTimer = 0 (reset), userID = 0 (por defecto)
-        const command = `*CMDS,OM,${imei},000000000000,L0,0,0,${timestamp}#\n`;
+        const deviceCode = socket.deviceCode || 'OM';
+        const command = `*CMDS,${deviceCode},${imei},000000000000,L0,0,0,${timestamp}#\n`;
 
         // 5. Enviar el comando al socket
         const sent = sendToLock(socket, command);

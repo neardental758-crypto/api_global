@@ -75,7 +75,10 @@ async function handleLockMessage(socket, rawMessage) {
         if (!activeSockets.has(imei) || activeSockets.get(imei) !== socket) {
             activeSockets.set(imei, socket);
             socket.imei = imei;
+            socket.deviceCode = deviceCode;
             console.log(`[LockTCP] Conexión registrada/actualizada para IMEI: ${imei}`);
+        } else {
+            socket.deviceCode = deviceCode;
         }
     } else {
         console.warn(`[LockTCP] IMEI inválido o ausente en el comando: "${imei}"`);
@@ -160,8 +163,8 @@ async function handleLockMessage(socket, rawMessage) {
                 // Lock automático: *CMDR,OM,<IMEI>,<time>,L1,<userID>,<timestamp>,<rideTime>#
                 console.log(`[LockTCP] [L1 - Bloqueo manual] IMEI: ${imei} detectó bloqueo manual.`);
 
-                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,L1#\n
-                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,L1#\n`;
+                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,L1#\n
+                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,L1#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
@@ -180,8 +183,8 @@ async function handleLockMessage(socket, rawMessage) {
                 const result = parseInt(receivedItems[5], 10);
                 console.log(`[LockTCP] [L0 - Respuesta desbloqueo] IMEI: ${imei} | Resultado: ${result === 0 ? 'Exito' : 'Fallo'}`);
 
-                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,L0#\n
-                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,L0#\n`;
+                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,L0#\n
+                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,L0#\n`;
                 sendToLock(socket, ackCmd);
 
                 if (result === 0) {
@@ -212,8 +215,8 @@ async function handleLockMessage(socket, rawMessage) {
 
                 console.log(`[LockTCP] [D0 - Posición GPS] IMEI: ${imei} | Lat: ${latDecimal} | Lon: ${lonDecimal}`);
 
-                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,D0#\n
-                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,D0#\n`;
+                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,D0#\n
+                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,D0#\n`;
                 sendToLock(socket, ackCmd);
 
                 if (latDecimal !== null && lonDecimal !== null) {
@@ -291,8 +294,8 @@ async function handleLockMessage(socket, rawMessage) {
                 const alertType = receivedItems[5];
                 console.log(`[LockTCP] [W0 - Alerta] IMEI: ${imei} | Tipo de Alerta: ${alertType}`);
 
-                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,W0#\n
-                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,W0#\n`;
+                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,W0#\n
+                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,W0#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
@@ -340,7 +343,7 @@ async function handleLockMessage(socket, rawMessage) {
 
                 // 2. Disparar el comando L0 para desbloquear el candado
                 const timestamp = Math.floor(Date.now() / 1000);
-                const unlockCommand = `*CMDS,OM,${imei},000000000000,L0,0,0,${timestamp}#\n`;
+                const unlockCommand = `*CMDS,${deviceCode},${imei},000000000000,L0,0,0,${timestamp}#\n`;
                 
                 const sent = sendToLock(socket, unlockCommand);
                 if (sent) {
@@ -363,8 +366,8 @@ async function handleLockMessage(socket, rawMessage) {
                 const iccid = receivedItems[5] ? receivedItems[5].trim() : '';
                 console.log(`[LockTCP] [I0 - ICCID] IMEI: ${imei} | ICCID: ${iccid}`);
 
-                // Responder ACK obligatorio: *CMDS,OM,<IMEI>,000000000000,Re,I0#\n
-                const ackCmd = `*CMDS,OM,${imei},000000000000,Re,I0#\n`;
+                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,I0#\n
+                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,I0#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
