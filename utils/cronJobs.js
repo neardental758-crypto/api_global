@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const SesionUsuario = require('../models/mysql/sesionUsuario');
-const { agendamientoOperarioModels, agendamientoIncumplidoModels, estacionModels, mantenimientoModels, reservasModels, bicicletasModels } = require('../models');
+const { agendamientoOperarioModels, agendamientoIncumplidoModels, estacionModels, mantenimientoModels, reservasModels, bicicletasModels, rentaParqueoModels, reservasParqueoModels, lugarParqueoModels } = require('../models');
 const { Op } = require('sequelize');
 
 const startSessionCleanup = () => {
@@ -189,4 +189,161 @@ const startReservationsCleanup = () => {
   });
 };
 
-module.exports = { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup, verificarIncumplimientosAgendamientos };
+const parseRentaTime = (fechaStr, finStr) => {
+  if (!fechaStr || !finStr) return null;
+
+  let fechaParte = fechaStr;
+  if (fechaStr.includes('T')) {
+    fechaParte = fechaStr.split('T')[0];
+  } else if (fechaStr.includes(' ')) {
+    fechaParte = fechaStr.split(' ')[0];
+  }
+
+  let año, mes, dia;
+  if (fechaParte.includes('-')) {
+    const partes = fechaParte.split('-');
+    if (partes[0].length === 4) {
+      [año, mes, dia] = partes.map(Number);
+    } else {
+      [dia, mes, año] = partes.map(Number);
+    }
+  } else if (fechaParte.includes('/')) {
+    const partes = fechaParte.split('/');
+    if (partes[0].length === 4) {
+      [año, mes, dia] = partes.map(Number);
+    } else {
+      [dia, mes, año] = partes.map(Number);
+    }
+  } else {
+    const d = new Date(fechaStr);
+    if (!isNaN(d.getTime())) {
+      año = d.getFullYear();
+      mes = d.getMonth() + 1;
+      dia = d.getDate();
+    } else {
+      return null;
+    }
+  }
+
+  const partesHora = finStr.split(':');
+  const hora = parseInt(partesHora[0], 10) || 0;
+  const min = parseInt(partesHora[1], 10) || 0;
+  const seg = partesHora.length > 2 ? parseInt(partesHora[2], 10) : 0;
+
+  return Date.UTC(año, mes - 1, dia, hora, min, seg);
+};
+
+const limpiarParqueoNocturno = async () => {
+  try {
+    console.log('🔄 [CRON] Iniciando limpieza nocturna de parqueaderos (ElectroHub)...');
+
+    // 1. Cancelar reservas de parqueo que sigan activas
+    const [reservasActualizadas] = await reservasParqueoModels.update(
+      { estado: 'CANCELADA' },
+      { where: { estado: 'ACTIVA' } }
+    );
+    if (reservasActualizadas > 0) {
+      console.log(`❌ [CRON] Se cancelaron ${reservasActualizadas} reservas de parqueo activas.`);
+    }
+
+    // 2. Finalizar rentas de parqueo que sigan activas
+    const [rentasActualizadas] = await rentaParqueoModels.update(
+      { estado: 'FINALIZADA' },
+      { where: { estado: 'ACTIVA' } }
+    );
+    if (rentasActualizadas > 0) {
+      console.log(`✅ [CRON] Se finalizaron ${rentasActualizadas} rentas de parqueo activas.`);
+    }
+
+    // 3. Dejar los lugares de parqueo ocupados o reservados en DISPONIBLE
+    const [lugaresActualizados] = await lugarParqueoModels.update(
+      { estado: 'DISPONIBLE' },
+      { 
+        where: { 
+          estado: { 
+            [Op.in]: ['OCUPADO', 'RESERVADO'] 
+          } 
+        } 
+      }
+    );
+    if (lugaresActualizados > 0) {
+      console.log(`🚲 [CRON] Se liberaron ${lugaresActualizados} lugares de parqueo.`);
+    }
+
+    console.log('🏁 [CRON] Limpieza nocturna de parqueaderos (ElectroHub) completada.');
+  } catch (error) {
+    console.error('❌ [CRON] Error en la limpieza nocturna de parqueaderos:', error);
+  }
+};
+
+const verificarVencimientosParqueo = async () => {
+  try {
+    console.log('🔄 [CRON] Iniciando control de vencimientos de parqueaderos...');
+    const rentasActivas = await rentaParqueoModels.findAll({
+      where: { estado: 'ACTIVA' }
+    });
+
+    const ahoraUTC = new Date();
+    // Ajustamos a la zona horaria en la que parece operar la app internamente (-5 horas)
+    const ahoraBogota = new Date(ahoraUTC.getTime() - (5 * 60 * 60 * 1000));
+
+    const currentTime = Date.UTC(
+      ahoraBogota.getUTCFullYear(),
+      ahoraBogota.getUTCMonth(),
+      ahoraBogota.getUTCDate(),
+      ahoraBogota.getUTCHours(),
+      ahoraBogota.getUTCMinutes(),
+      ahoraBogota.getUTCSeconds()
+    );
+
+    let contadorVencidos = 0;
+
+    for (const rent of rentasActivas) {
+      const rentaTime = parseRentaTime(rent.fecha, rent.fin);
+      if (!rentaTime) continue;
+
+      if (currentTime >= rentaTime) {
+        // Finalizar renta
+        await rentaParqueoModels.update(
+          { estado: 'FINALIZADA' },
+          { where: { id: rent.id } }
+        );
+
+        // Liberar lugar de parqueo
+        if (rent.lugar_parqueo) {
+          await lugarParqueoModels.update(
+            { estado: 'DISPONIBLE' },
+            { where: { id: rent.lugar_parqueo } }
+          );
+        }
+        console.log(`✅ [CRON] Renta ${rent.id} vencida finalizada y espacio ${rent.lugar_parqueo} liberado.`);
+        contadorVencidos++;
+      }
+    }
+
+    if (contadorVencidos > 0) {
+      console.log(`🏁 [CRON] Finalizadas ${contadorVencidos} rentas de parqueo vencidas.`);
+    }
+  } catch (error) {
+    console.error('❌ [CRON] Error en el control de vencimientos de parqueaderos:', error);
+  }
+};
+
+const startParqueoNocturnoCleanup = () => {
+  cron.schedule('0 0 * * *', limpiarParqueoNocturno);
+};
+
+const startParqueoVencimientoCleanup = () => {
+  cron.schedule('0 7-21 * * *', verificarVencimientosParqueo);
+};
+
+module.exports = { 
+  startSessionCleanup, 
+  startAgendamientosCleanup, 
+  startReservationsCleanup, 
+  verificarIncumplimientosAgendamientos,
+  startParqueoNocturnoCleanup,
+  startParqueoVencimientoCleanup,
+  limpiarParqueoNocturno,
+  verificarVencimientosParqueo
+};
