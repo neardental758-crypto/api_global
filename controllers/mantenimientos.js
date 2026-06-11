@@ -407,6 +407,103 @@ const getMantenimientosPorBicicleta = async (req, res) => {
     }
 };
 
+const validarAsignacionOperario = async (operario_id, estacion_id) => {
+    const normalizeText = (text) => {
+        if (!text) return "";
+        return String(text).toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    };
+
+    const isValidCity = (city) => {
+        if (!city) return false;
+        const normalized = city.toLowerCase().trim();
+        return normalized !== "" && normalized !== "dashboard" && normalized !== "conductor";
+    };
+
+    const estacion = await estacionModels.findOne({
+        where: {
+            [Op.or]: [
+                { est_id: estacion_id },
+                { est_estacion: estacion_id }
+            ]
+        }
+    });
+
+    if (!estacion) {
+        throw new Error("ESTACION_NO_ENCONTRADA");
+    }
+
+    const est_estacion = estacion.est_estacion;
+    const est_ciudad = estacion.est_ciudad;
+
+    const operario = await usuarioModels.findOne({
+        where: { usu_documento: operario_id }
+    });
+
+    if (!operario) {
+        throw new Error("OPERARIO_NO_ENCONTRADO");
+    }
+
+    const agendamientosActivos = await agendamientoOperarioModels.findAll({
+        where: {
+            operario_id,
+            activo: true
+        }
+    });
+
+    // 1. Check direct station assignment
+    let estaAsignado = false;
+    if (agendamientosActivos.length > 0) {
+        estaAsignado = agendamientosActivos.some(
+            ag => normalizeText(ag.estacion_id) === normalizeText(est_estacion)
+        );
+    }
+
+    if (estaAsignado) {
+        return true;
+    }
+
+    // 2. If not directly assigned, check cities
+    const resolvedCities = new Set();
+    
+    // Resolve cities from active agendamientos
+    if (agendamientosActivos.length > 0) {
+        const assignedStationIds = agendamientosActivos.map(ag => ag.estacion_id);
+        const assignedStations = await estacionModels.findAll({
+            where: {
+                est_estacion: {
+                    [Op.in]: assignedStationIds
+                }
+            },
+            attributes: ['est_ciudad']
+        });
+        assignedStations.forEach(s => {
+            if (s.est_ciudad) {
+                resolvedCities.add(normalizeText(s.est_ciudad));
+            }
+        });
+    }
+
+    // Fallback to usu_ciudad if it is valid
+    if (resolvedCities.size === 0 && isValidCity(operario.usu_ciudad)) {
+        resolvedCities.add(normalizeText(operario.usu_ciudad));
+    }
+
+    // If no valid city can be determined, reject the assignment
+    if (resolvedCities.size === 0) {
+        throw new Error(`El operario no tiene una ciudad válida o agendamientos activos para determinar su ubicación`);
+    }
+
+    // Check if the target station's city matches any resolved city
+    if (est_ciudad) {
+        const targetCityNormalized = normalizeText(est_ciudad);
+        if (resolvedCities.has(targetCityNormalized)) {
+            return true;
+        }
+    }
+
+    throw new Error(`El operario no pertenece a la misma ciudad de la estación (${est_ciudad || 'Sin ciudad'})`);
+};
+
 const crearMantenimiento = async (req, res) => {
     const transaction = await sequelize.transaction();
     try {
@@ -423,6 +520,10 @@ const crearMantenimiento = async (req, res) => {
             if (isNaN(mantenimientoData.estacion_id)) {
                 throw new Error("estacion_id no es un número válido");
             }
+        }
+        
+        if (mantenimientoData.operario_id && mantenimientoData.estacion_id) {
+            await validarAsignacionOperario(mantenimientoData.operario_id, mantenimientoData.estacion_id);
         }
         
         // Si no hay prioridad, establecer media como valor por defecto
@@ -486,6 +587,9 @@ const crearMantenimiento = async (req, res) => {
     } catch (error) {
         await transaction.rollback();
         console.error("Backend ERROR:", error);
+        if (error.message && (error.message.includes("El operario") || error.message.includes("OPERARIO_NO_ENCONTRADO") || error.message.includes("ESTACION_NO_ENCONTRADA"))) {
+            return res.status(400).send({ error: error.message });
+        }
         handleHttpError(res, "ERROR_CREAR_MANTENIMIENTO");
     }
 };
@@ -497,6 +601,12 @@ const actualizarMantenimiento = async (req, res) => {
         const mantenimiento = await mantenimientoModels.findByPk(id);
         if (!mantenimiento) {
             return handleHttpError(res, "MANTENIMIENTO_NO_ENCONTRADO", 404);
+        }
+
+        const operario_id = body.operario_id || mantenimiento.operario_id;
+        const estacion_id = body.estacion_id || mantenimiento.estacion_id;
+        if (operario_id && estacion_id && (body.operario_id !== undefined || body.estacion_id !== undefined)) {
+            await validarAsignacionOperario(operario_id, estacion_id);
         }
         
         // Si el estado es finalizado, agregar fecha de finalización
@@ -523,6 +633,9 @@ const actualizarMantenimiento = async (req, res) => {
         res.send({ data: dataActualizada });
     } catch (error) {
         console.error(error);
+        if (error.message && (error.message.includes("El operario") || error.message.includes("OPERARIO_NO_ENCONTRADO") || error.message.includes("ESTACION_NO_ENCONTRADA"))) {
+            return res.status(400).send({ error: error.message });
+        }
         handleHttpError(res, "ERROR_ACTUALIZAR_MANTENIMIENTO");
     }
 };
@@ -834,6 +947,10 @@ const crearMantenimientosMasivo = async (req, res) => {
         if (mantenimientoData.estacion_id !== undefined && mantenimientoData.estacion_id !== null) {
           mantenimientoData.estacion_id = parseInt(mantenimientoData.estacion_id, 10);
         }
+
+        if (mantenimientoData.operario_id && mantenimientoData.estacion_id) {
+          await validarAsignacionOperario(mantenimientoData.operario_id, mantenimientoData.estacion_id);
+        }
         
         if (!mantenimientoData.prioridad) {
             mantenimientoData.prioridad = 'media';
@@ -887,6 +1004,9 @@ const crearMantenimientosMasivo = async (req, res) => {
     } catch (error) {
       await transaction.rollback();
       console.error("Error en creación masiva:", error);
+      if (error.message && (error.message.includes("El operario") || error.message.includes("OPERARIO_NO_ENCONTRADO") || error.message.includes("ESTACION_NO_ENCONTRADA"))) {
+        return res.status(400).send({ error: error.message });
+      }
       handleHttpError(res, "ERROR_CREAR_MANTENIMIENTOS_MASIVO");
     }
 };
@@ -1565,6 +1685,12 @@ const trasladoMasivoMantenimientos = async (req, res) => {
             });
         }
 
+        for (const m of mantenimientosPendientes) {
+            if (m.estacion_id) {
+                await validarAsignacionOperario(operario_destino, m.estacion_id);
+            }
+        }
+
         const mantenimientoIds = mantenimientosPendientes.map(m => m.id);
 
         // Actualizar mantenimientos
@@ -1604,6 +1730,9 @@ const trasladoMasivoMantenimientos = async (req, res) => {
     } catch (error) {
         await transaction.rollback();
         console.error(error);
+        if (error.message && (error.message.includes("El operario") || error.message.includes("OPERARIO_NO_ENCONTRADO") || error.message.includes("ESTACION_NO_ENCONTRADA"))) {
+            return res.status(400).send({ error: error.message });
+        }
         handleHttpError(res, "ERROR_TRASLADO_MASIVO_MANTENIMIENTOS");
     }
 };

@@ -356,7 +356,7 @@ const getEstacionesEmpresa = async (req, res) => {
       where: {
         est_empresa: empresa.emp_nombre
       },
-      attributes: ['est_estacion', 'est_empresa']
+      attributes: ['est_estacion', 'est_empresa', 'est_ciudad']
     });
     
     res.send(estaciones);

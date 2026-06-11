@@ -497,22 +497,33 @@ const getOperarios = async (req, res) => {
                 'usu_rol_dash', 'usu_ciudad', 'usu_empresa',
             ],
             where: {
-                // Aquí puedes agregar condiciones para filtrar solo operarios si hay algún campo que los identifique
                 usu_rol_dash: "Operario"
             }
         });
+
+        // Obtener agendamientos activos de los operarios para asociarles las estaciones
+        const agendamientos = await sequelize.query(
+            "SELECT operario_id, estacion_id FROM bc_agendamientos_operarios WHERE activo = 1",
+            { type: QueryTypes.SELECT }
+        );
 
         const filteredData = data.filter(operario =>
             operario.usu_nombre &&
             operario.usu_nombre.trim() !== '' &&
             operario.usu_nombre !== 'Desconocido'
-        );
+        ).map(operario => {
+            const opJson = operario.toJSON();
+            opJson.estaciones_asignadas = agendamientos
+                .filter(a => a.operario_id === opJson.usu_documento)
+                .map(a => a.estacion_id);
+            return opJson;
+        });
 
         res.send({ data: filteredData });
 
     } catch (error) {
         console.error(error);
-        handleHttpError(res, "ERROR_GET_OPERARIOS");
+        httpError(res, "ERROR_GET_OPERARIOS");
     }
 };
 
