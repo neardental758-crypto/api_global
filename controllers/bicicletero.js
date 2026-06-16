@@ -157,6 +157,24 @@ const getItemClave_cortezza  = async (req, res) => {
     }
 };
 
+const getItemsByEstacion = async (req, res) => {
+    try {
+        req = matchedData(req);
+        const { bro_estacion } = req;
+        const data = await bicicleterosModels.findAll({
+            where: { bro_estacion: bro_estacion },
+            include: [{
+                model: bicicletasModels,
+                required: false
+            }]
+        });
+        res.send({ data });
+    } catch (error) {
+        console.error(error);
+        httpError(res, "ERROR_GET_BICICLETEROS_BY_ESTACION");
+    }
+};
+
 module.exports = {
-    getItems, getItem, getItemClave, getItemEmpresa, createItem, updateItem, deleteItem, updateKey, getItemClave_cortezza
+    getItems, getItem, getItemClave, getItemEmpresa, createItem, updateItem, deleteItem, updateKey, getItemClave_cortezza, getItemsByEstacion
 }

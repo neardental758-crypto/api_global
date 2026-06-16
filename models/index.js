@@ -58,6 +58,7 @@ const compartidoSolicitudNoEncontrada = require('./mysql/compartidoSolicitudNoEn
 const AgendamientoOperario = require('./mysql/agendamientos_operarios');
 const AgendamientoIncumplido = require('./mysql/agendamientos_incumplidos');
 const RegistroPP = require('./mysql/registrospp');
+const ReporteContradiccion = require('./mysql/reportesContradicciones');
 
 const Candado = require('./mysql/candados');
 const Rol = require('./mysql/roles');
@@ -154,6 +155,7 @@ if (MOTORDB === 'mysql') {
         usuariosRolesModels: require('./mysql/usuariosRoles'),
         permisosModels: require('./mysql/permisos'),
         tarjetasNfcModels: require('./mysql/tarjetasNfc'),
+        reportesContradiccionesModels: require('./mysql/reportesContradicciones'),
     };
 
     Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
@@ -630,6 +632,16 @@ if (MOTORDB === 'mysql') {
     TarjetaNfc.belongsTo(Usuario, { foreignKey: 'tnfc_usuario_id', targetKey: 'usu_documento', as: 'user' });
     Usuario.hasMany(TarjetaNfc, { foreignKey: 'tnfc_usuario_id', sourceKey: 'usu_documento', as: 'nfcCards' });
 
+    ReporteContradiccion.belongsTo(Usuario, {
+        foreignKey: 'rep_tecnico_documento',
+        targetKey: 'usu_documento',
+        as: 'tecnico'
+    });
+    Usuario.hasMany(ReporteContradiccion, {
+        foreignKey: 'rep_tecnico_documento',
+        sourceKey: 'usu_documento',
+        as: 'reportesContradicciones'
+    });
 
     module.exports = models
 

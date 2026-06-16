@@ -39,8 +39,15 @@ if (MOTORDB === 'mysql'){
             return validateResults(req, res, next);
         }
     ];
+
+    const validatorGetEstacion = [
+        check("bro_estacion").exists().notEmpty(),
+        (req, res, next) =>{
+            return validateResults(req, res, next);
+        }
+    ];
    
-    module.exports = { validatorCreateBicicleteros, validatorGetBicicleteros, validatorGetClave, validatorGetKEY };
+    module.exports = { validatorCreateBicicleteros, validatorGetBicicleteros, validatorGetClave, validatorGetKEY, validatorGetEstacion };
 }
 
 

@@ -602,30 +602,15 @@ const finalizeKeyChange = async (bikeId, transaction) => {
             }
         );
 
-        // Restaurar clave anterior en Bicicleta y Bicicletero
-        if (historialActivo.his_clave_old) {
+        // Establecer nueva clave en Bicicleta
+        if (historialActivo.his_clave_new) {
             await bicicletasModels.update(
-                { bic_clave: historialActivo.his_clave_old },
+                { bic_clave: historialActivo.his_clave_new },
                 { 
                     where: { bic_id: bikeId },
                     transaction 
                 }
             );
-
-            const bicicletero = await bicicleterosModels.findOne({
-                where: { bro_bicicleta: bikeId },
-                transaction
-            });
-
-            if (bicicletero) {
-                await bicicleterosModels.update(
-                    { bro_clave: historialActivo.his_clave_old },
-                    { 
-                        where: { bro_id: bicicletero.bro_id },
-                        transaction 
-                    }
-                );
-            }
         }
     }
 };

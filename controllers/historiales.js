@@ -124,14 +124,6 @@ const updateItem = async (req, res) => {
         );
         
         if (body.his_estado === 'FINALIZADA' && historial.his_clave_new) {
-            // Update both for compatibility during migration
-            await bicicleterosModels.update(
-                { bro_clave: historial.his_clave_new },
-                { 
-                    where: { bro_bicicleta: historial.his_bicicleta }
-                }
-            );
-
             await bicicletasModels.update(
                 { bic_clave: historial.his_clave_new },
                 {
