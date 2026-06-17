@@ -262,7 +262,7 @@ const getMantenimientosPorEstacion = async (req, res) => {
         }
 
         const offset = (page - 1) * limit;
-        const whereClause = {};
+        const whereClause = { estacion_id };
         const filterObj = req.query.filter ? JSON.parse(req.query.filter) : req.query;
 
         if (filterObj.operario_id) whereClause.operario_id = filterObj.operario_id;
@@ -291,7 +291,8 @@ const getMantenimientosPorEstacion = async (req, res) => {
             };
         }
 
-        const bicicletaWhere = { bic_estacion: estacion_id };
+        const bicicletaWhere = {};
+        let hasBicicletaFilter = false;
 
         const rawBicicletas = filterObj.bicicletas;
         let bicicletasSeleccionadas = [];
@@ -317,8 +318,10 @@ const getMantenimientosPorEstacion = async (req, res) => {
             .filter((x) => x !== '');
 
         if (bicicletasSeleccionadas.length > 0) {
+            hasBicicletaFilter = true;
             bicicletaWhere.bic_numero = { [Op.in]: bicicletasSeleccionadas };
         } else if (filterObj.bicicleta) {
+            hasBicicletaFilter = true;
             bicicletaWhere[Op.or] = [
                 { bic_numero: { [Op.like]: `%${filterObj.bicicleta}%` } },
                 { bic_id: isNaN(filterObj.bicicleta) ? null : parseInt(filterObj.bicicleta) },
@@ -326,6 +329,7 @@ const getMantenimientosPorEstacion = async (req, res) => {
         }
 
         if (filterObj.ordenar_por === 'bicicletas_taller') {
+            hasBicicletaFilter = true;
             bicicletaWhere.bic_estado = {
                 [Op.in]: ['EN_MANTENIMIENTO', 'EN TALLER', 'REPARACION', 'REVISION'],
             };
@@ -351,8 +355,8 @@ const getMantenimientosPorEstacion = async (req, res) => {
             include: [
                 {
                     model: bicicletasModels,
-                    where: bicicletaWhere,
-                    required: true,
+                    where: hasBicicletaFilter ? bicicletaWhere : undefined,
+                    required: !!hasBicicletaFilter,
                     attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado'],
                 },
                 {
@@ -1884,12 +1888,13 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
 const exportMantenimientosPorEstacion = async (req, res) => {
     try {
         const { estacion_id } = matchedData(req);
-        const whereClause = {};
+        const whereClause = { estacion_id };
         const filterObj = req.query.filter ? JSON.parse(req.query.filter) : req.query;
 
         if (filterObj.operario_id) whereClause.operario_id = filterObj.operario_id;
         if (filterObj.estado && filterObj.estado !== 'todos') whereClause.estado = filterObj.estado;
         if (filterObj.prioridad && filterObj.prioridad !== 'todos') whereClause.prioridad = filterObj.prioridad;
+        if (filterObj.tipo && filterObj.tipo !== 'todos') whereClause.tipo_mantenimiento = filterObj.tipo;
 
         if (filterObj.fecha_inicio || filterObj.fecha_fin) {
             whereClause.fecha_creacion = {};
@@ -1912,7 +1917,8 @@ const exportMantenimientosPorEstacion = async (req, res) => {
             };
         }
 
-        const bicicletaWhere = { bic_estacion: estacion_id };
+        const bicicletaWhere = {};
+        let hasBicicletaFilter = false;
 
         const rawBicicletas = filterObj.bicicletas;
         let bicicletasSeleccionadas = [];
@@ -1938,8 +1944,10 @@ const exportMantenimientosPorEstacion = async (req, res) => {
             .filter((x) => x !== '');
 
         if (bicicletasSeleccionadas.length > 0) {
+            hasBicicletaFilter = true;
             bicicletaWhere.bic_numero = { [Op.in]: bicicletasSeleccionadas };
         } else if (filterObj.bicicleta) {
+            hasBicicletaFilter = true;
             bicicletaWhere[Op.or] = [
                 { bic_numero: { [Op.like]: `%${filterObj.bicicleta}%` } },
                 { bic_id: isNaN(filterObj.bicicleta) ? null : parseInt(filterObj.bicicleta) }
@@ -1947,6 +1955,7 @@ const exportMantenimientosPorEstacion = async (req, res) => {
         }
 
         if (filterObj.ordenar_por === 'bicicletas_taller') {
+            hasBicicletaFilter = true;
             bicicletaWhere.bic_estado = {
                 [Op.in]: ['EN_MANTENIMIENTO', 'EN TALLER', 'REPARACION', 'REVISION']
             };
@@ -1972,8 +1981,8 @@ const exportMantenimientosPorEstacion = async (req, res) => {
             include: [
                 {
                     model: bicicletasModels,
-                    where: bicicletaWhere,
-                    required: true,
+                    where: hasBicicletaFilter ? bicicletaWhere : undefined,
+                    required: !!hasBicicletaFilter,
                     attributes: ['bic_id', 'bic_numero', 'bic_estacion', 'bic_estado']
                 },
                 {
