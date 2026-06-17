@@ -501,9 +501,9 @@ const getOperarios = async (req, res) => {
             }
         });
 
-        // Obtener agendamientos activos de los operarios para asociarles las estaciones
+        // Obtener agendamientos de los operarios para asociarles las estaciones
         const agendamientos = await sequelize.query(
-            "SELECT operario_id, estacion_id FROM bc_agendamientos_operarios WHERE activo = 1",
+            "SELECT operario_id, estacion_id FROM bc_agendamientos_operarios",
             { type: QueryTypes.SELECT }
         );
 
