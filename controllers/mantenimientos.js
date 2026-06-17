@@ -445,8 +445,7 @@ const validarAsignacionOperario = async (operario_id, estacion_id) => {
 
     const agendamientosActivos = await agendamientoOperarioModels.findAll({
         where: {
-            operario_id,
-            activo: true
+            operario_id
         }
     });
 
