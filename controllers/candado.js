@@ -173,7 +173,8 @@ const verifyData5g = async (req, res) => {
             mac: candado.can_mac,
             qrNumber: candado.can_qr_numero || qrNumber,
             organizationId: organizationId,
-            lockStatus: candado.can_estado_candado
+            lockStatus: candado.can_estado_candado,
+            lastCommand: candado.can_ultimo_comando || ""
         };
 
         res.send({

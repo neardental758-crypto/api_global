@@ -478,6 +478,9 @@ function startLockTcpServer() {
     const server = net.createServer((socket) => {
         console.log(`[LockTCP] Nueva conexión entrante desde ${socket.remoteAddress}:${socket.remotePort}`);
         
+        // Habilitar keep-alive de 60 segundos para detectar sockets medio abiertos/zombies de forma proactiva
+        socket.setKeepAlive(true, 60000);
+        
         // Timeout de inactividad de 5 minutos (300 segundos) para liberar sockets zombies
         socket.setTimeout(300000); 
         
