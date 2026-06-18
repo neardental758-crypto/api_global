@@ -196,16 +196,32 @@ async function handleLockMessage(socket, rawMessage) {
             }
 
             case 'H0': {
-                // Heartbeat: *CMDR,OM,<IMEI>,<time>,H0,<lockStatus>,<voltage>,<signal>,<battery%>,<error>#
-                // receivedItems[5] = lockStatus (0=open, 1=closed)
-                // receivedItems[7] = signal
-                // receivedItems[8] = battery%
-                const lockStatus = parseInt(receivedItems[5], 10);
-                const signal = parseInt(receivedItems[7], 10) || 0;
-                const batteryPercent = parseInt(receivedItems[8], 10) || 0;
-                const statusStr = (lockStatus === 0) ? 'open' : 'closed';
+                // Trama real de este candado:
+                // *CMDR,SH,<IMEI>,<time>,H0,<lockStatus>,<voltage_x100>,<signal_CSQ>#
+                // [0]=*CMDR [1]=SH [2]=IMEI [3]=time [4]=H0
+                // [5]=lockStatus  (0=open, 1=closed)
+                // [6]=voltage     (ej: 409 = 4.09 V — batería LiPo 3.7V)
+                // [7]=signal CSQ  (0-31, 22 ≈ -73 dBm, buena señal)
+                // No existe campo battery% en la trama — se calcula desde el voltaje
+                const lockStatus    = parseInt(receivedItems[5], 10);
+                const voltageRaw    = parseInt(receivedItems[6], 10) || 0;   // ej: 409
+                const signal        = parseInt(receivedItems[7], 10) || 0;   // ej: 22
+                const statusStr     = (lockStatus === 0) ? 'open' : 'closed';
 
-                console.log(`[LockTCP] [H0 - Heartbeat] IMEI: ${imei} | Estado: ${statusStr} | Batería: ${batteryPercent}% | Señal: ${signal}`);
+                // Convertir voltaje a voltios (409 → 4.09 V)
+                const voltageV = voltageRaw / 100;
+
+                // Calcular porcentaje de batería — celda LiPo 3.7 V:
+                //   mín: 3.50 V = 0%   máx: 4.20 V = 100%
+                const VMIN = 3.50;
+                const VMAX = 4.20;
+                const batteryPercent = Math.max(0, Math.min(100,
+                    Math.round(((voltageV - VMIN) / (VMAX - VMIN)) * 100)
+                ));
+
+                // Log completo de la trama para debugging
+                console.log(`[LockTCP] [H0 - Heartbeat] IMEI: ${imei} | Trama: [${receivedItems.join(' | ')}]`);
+                console.log(`[LockTCP] [H0 - Heartbeat] IMEI: ${imei} | Estado: ${statusStr} | Voltaje: ${voltageV}V | Batería: ${batteryPercent}% | Señal CSQ: ${signal}`);
 
                 await candadosModels.update({
                     can_estado_candado: statusStr,
