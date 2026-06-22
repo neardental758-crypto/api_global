@@ -1077,6 +1077,7 @@ const loginApp = async (req, res) => {
             usu_img: user.usu_img,
             usu_recorrido: user.usu_recorrido,
             usu_habilitado: user.usu_habilitado,
+            usu_rol_dash: user.usu_rol_dash,
             organizationId: empresaData ? empresaData.emp_id : null,
             organizationName: user.usu_empresa,
             roles: userRoles.map(r => r.ur_rol_id),

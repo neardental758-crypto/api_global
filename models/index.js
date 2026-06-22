@@ -59,6 +59,7 @@ const AgendamientoOperario = require('./mysql/agendamientos_operarios');
 const AgendamientoIncumplido = require('./mysql/agendamientos_incumplidos');
 const RegistroPP = require('./mysql/registrospp');
 const PrestamosRuta = require('./mysql/prestamosRuta');
+const CambioBateria = require('./mysql/cambiosBaterias');
 
 const Candado = require('./mysql/candados');
 const Rol = require('./mysql/roles');
@@ -158,6 +159,7 @@ if (MOTORDB === 'mysql') {
         permisosModels: require('./mysql/permisos'),
         tarjetasNfcModels: require('./mysql/tarjetasNfc'),
         prestamosRutaModels: require('./mysql/prestamosRuta'),
+        cambiosBateriasModels: require('./mysql/cambiosBaterias'),
     };
 
     Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
@@ -647,6 +649,14 @@ if (MOTORDB === 'mysql') {
     Usuario.hasMany(Penalizacion, { foreignKey: 'pen_usuario', sourceKey: 'usu_documento', as: 'penalizaciones' });
     Penalizacion.belongsTo(Usuario, { foreignKey: 'pen_usuario', targetKey: 'usu_documento', as: 'usuario' });
 
+    CambioBateria.belongsTo(Usuario, { foreignKey: 'cba_operario_id', targetKey: 'usu_documento', as: 'operator' });
+    Usuario.hasMany(CambioBateria, { foreignKey: 'cba_operario_id', sourceKey: 'usu_documento', as: 'swaps' });
+
+    CambioBateria.belongsTo(Bicicleta, { foreignKey: 'cba_vehiculo_id', targetKey: 'bic_id', as: 'bike' });
+    Bicicleta.hasMany(CambioBateria, { foreignKey: 'cba_vehiculo_id', sourceKey: 'bic_id', as: 'swaps' });
+
+    CambioBateria.belongsTo(Candado, { foreignKey: 'cba_candado_id', targetKey: 'can_id', as: 'lock' });
+    Candado.hasMany(CambioBateria, { foreignKey: 'cba_candado_id', sourceKey: 'can_id', as: 'swaps' });
 
     module.exports = models
 

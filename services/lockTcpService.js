@@ -1,5 +1,5 @@
 const net = require('net');
-const { candadosModels, tarjetasNfcModels, prestamosModels, prestamosRutaModels, bicicletasModels, estacionModels, empresaModels } = require('../models');
+const { candadosModels, tarjetasNfcModels, prestamosModels, prestamosRutaModels, bicicletasModels, estacionModels, empresaModels, cambiosBateriasModels } = require('../models');
 
 /**
  * Mapea el candado de la base de datos MySQL a la estructura Loopback JSON esperada por el Frontend Angular
@@ -13,6 +13,7 @@ async function mapCandadoToFrontend(candado) {
         qrNumber: json.can_qr_numero || "",
         mac: json.can_mac || "",
         battery: json.can_bateria !== undefined ? String(json.can_bateria) : "0",
+        batteryVehiculo: json.can_bateria_vehiculo !== undefined ? String(json.can_bateria_vehiculo) : "0",
         lockStatus: json.can_estado_candado || "closed",
         signal: json.can_senal !== undefined ? String(json.can_senal) : "0",
         simNumber: json.can_numero_sim || "",
@@ -119,16 +120,25 @@ async function handleLockMessage(socket, rawMessage) {
     const cleanMessage = message.replace(/#$/, '');
     const receivedItems = cleanMessage.split(',');
 
-    if (receivedItems.length < 5) {
+    if (receivedItems.length < 4) {
         console.warn(`[LockTCP] Mensaje inválido o incompleto: "${message}"`);
         return;
     }
 
-    const stxFrameHeader = receivedItems[0]; // Ej: *CMDR
-    const deviceCode = receivedItems[1];     // Ej: OM
+    const stxFrameHeader = receivedItems[0]; // Ej: *CMDR o *SCOR
+    const deviceCode = receivedItems[1];     // Ej: OM o SH
     const imei = receivedItems[2];           // 15 dígitos
-    const time = receivedItems[3];           // yyMMddHHmmss
-    const commandCode = receivedItems[4];   // Ej: Q0, H0, L0, L1, D0, W0
+    
+    // Validar si el paquete es short header (sin timestamp a nivel de índice 3)
+    let commandCode = receivedItems[4];
+    let time = receivedItems[3];
+    let isShortHeader = false;
+
+    if (['Q0', 'H0', 'L0', 'L1', 'D0', 'W0', 'I0', 'L5'].includes(receivedItems[3])) {
+        commandCode = receivedItems[3];
+        time = null;
+        isShortHeader = true;
+    }
 
     // Registrar/actualizar la asociación del socket activo con el IMEI
     if (imei && imei.length === 15) {
@@ -136,9 +146,11 @@ async function handleLockMessage(socket, rawMessage) {
             activeSockets.set(imei, socket);
             socket.imei = imei;
             socket.deviceCode = deviceCode;
-            console.log(`[LockTCP] Conexión registrada/actualizada para IMEI: ${imei}`);
+            socket.headerType = stxFrameHeader;
+            console.log(`[LockTCP] Conexión registrada/actualizada para IMEI: ${imei} | Header: ${stxFrameHeader}`);
         } else {
             socket.deviceCode = deviceCode;
+            socket.headerType = stxFrameHeader;
         }
     } else {
         console.warn(`[LockTCP] IMEI inválido o ausente en el comando: "${imei}"`);
@@ -161,10 +173,11 @@ async function handleLockMessage(socket, rawMessage) {
                 can_iccid: '',
                 can_estado_candado: 'closed',
                 can_bateria: 0,
+                can_bateria_vehiculo: 0,
                 can_senal: 0,
                 can_fecha_ultimo_comando: new Date(),
                 can_ultimo_comando: 'AUTO_CREATE',
-                can_bicicleta: null, // Asignar null si se permite, u otra forma
+                can_bicicleta: null,
                 can_created_at: new Date(),
                 can_updated_at: new Date()
             });
@@ -177,61 +190,103 @@ async function handleLockMessage(socket, rawMessage) {
     console.log(`[LockTCP] Mensaje recibido del IMEI ${imei}: CMD=${commandCode} | Tramas: ${cleanMessage}`);
 
     try {
+        const offset = isShortHeader ? 0 : 1;
         switch (commandCode) {
             case 'Q0': {
-                // Sign In: *CMDR,OM,<IMEI>,<time>,Q0,<voltage>,<battery%>#
-                // receivedItems[5] = voltage, receivedItems[6] = battery%
-                const batteryPercent = parseInt(receivedItems[6], 10) || 0;
-                
-                console.log(`[LockTCP] [Q0 - Sign-in] IMEI: ${imei} | Batería: ${batteryPercent}%`);
+                if (stxFrameHeader === '*SCOR') {
+                    // M136 Sign in: *SCOR,OM,<IMEI>,<time>,Q0,<voltage>,<battery%>,<chargingState>#
+                    const voltageRaw = parseInt(receivedItems[4 + offset], 10) || 0;
+                    const batteryPercentVehiculo = parseInt(receivedItems[5 + offset], 10) || 0;
+                    
+                    const voltageV = voltageRaw / 100;
+                    const VMIN = 3.50;
+                    const VMAX = 4.20;
+                    const batteryPercentIoT = Math.max(0, Math.min(100,
+                        Math.round(((voltageV - VMIN) / (VMAX - VMIN)) * 100)
+                    ));
 
-                await candadosModels.update({
-                    can_bateria: batteryPercent,
-                    can_fecha_ultimo_comando: new Date(),
-                    can_ultimo_comando: 'Q0'
-                }, {
-                    where: { can_imei: imei }
-                });
+                    console.log(`[LockTCP] [Q0 M136] IMEI: ${imei} | IoT Bat: ${batteryPercentIoT}% | Vehículo Bat: ${batteryPercentVehiculo}%`);
+
+                    await candadosModels.update({
+                        can_bateria: batteryPercentIoT,
+                        can_bateria_vehiculo: batteryPercentVehiculo,
+                        can_fecha_ultimo_comando: new Date(),
+                        can_ultimo_comando: 'Q0'
+                    }, {
+                        where: { can_imei: imei }
+                    });
+                } else {
+                    // Horseshoe Sign in: *CMDR,OM,<IMEI>,<time>,Q0,<voltage>,<battery%>#
+                    const batteryPercent = parseInt(receivedItems[5 + offset], 10) || 0;
+                    console.log(`[LockTCP] [Q0 Horseshoe] IMEI: ${imei} | Batería: ${batteryPercent}%`);
+
+                    await candadosModels.update({
+                        can_bateria: batteryPercent,
+                        can_fecha_ultimo_comando: new Date(),
+                        can_ultimo_comando: 'Q0'
+                    }, {
+                        where: { can_imei: imei }
+                    });
+                }
                 break;
             }
 
             case 'H0': {
-                // Trama real de este candado:
-                // *CMDR,SH,<IMEI>,<time>,H0,<lockStatus>,<voltage_x100>,<signal_CSQ>#
-                // [0]=*CMDR [1]=SH [2]=IMEI [3]=time [4]=H0
-                // [5]=lockStatus  (0=open, 1=closed)
-                // [6]=voltage     (ej: 409 = 4.09 V — batería LiPo 3.7V)
-                // [7]=signal CSQ  (0-31, 22 ≈ -73 dBm, buena señal)
-                // No existe campo battery% en la trama — se calcula desde el voltaje
-                const lockStatus    = parseInt(receivedItems[5], 10);
-                const voltageRaw    = parseInt(receivedItems[6], 10) || 0;   // ej: 409
-                const signal        = parseInt(receivedItems[7], 10) || 0;   // ej: 22
-                const statusStr     = (lockStatus === 0) ? 'open' : 'closed';
+                if (stxFrameHeader === '*SCOR') {
+                    // M136 Heartbeat:
+                    // *SCOR,OM,<IMEI>,<time>,H0,<lockStatus>,<voltage>,<signal>,<battery%>,<chargingState>,<error>,<runMode>#
+                    const lockStatus = parseInt(receivedItems[4 + offset], 10);
+                    const voltageRaw = parseInt(receivedItems[5 + offset], 10) || 0;
+                    const signal     = parseInt(receivedItems[6 + offset], 10) || 0;
+                    const batteryVeh = parseInt(receivedItems[7 + offset], 10) || 0;
 
-                // Convertir voltaje a voltios (409 → 4.09 V)
-                const voltageV = voltageRaw / 100;
+                    const statusStr = (lockStatus === 0) ? 'open' : 'closed';
+                    const voltageV = voltageRaw / 100;
+                    const VMIN = 3.50;
+                    const VMAX = 4.20;
+                    const batteryPercentIoT = Math.max(0, Math.min(100,
+                        Math.round(((voltageV - VMIN) / (VMAX - VMIN)) * 100)
+                    ));
 
-                // Calcular porcentaje de batería — celda LiPo 3.7 V:
-                //   mín: 3.50 V = 0%   máx: 4.20 V = 100%
-                const VMIN = 3.50;
-                const VMAX = 4.20;
-                const batteryPercent = Math.max(0, Math.min(100,
-                    Math.round(((voltageV - VMIN) / (VMAX - VMIN)) * 100)
-                ));
+                    console.log(`[LockTCP] [H0 M136] IMEI: ${imei} | Estado: ${statusStr} | IoT Bat: ${batteryPercentIoT}% | Vehículo Bat: ${batteryVeh}% | Signal: ${signal}`);
 
-                // Log completo de la trama para debugging
-                console.log(`[LockTCP] [H0 - Heartbeat] IMEI: ${imei} | Trama: [${receivedItems.join(' | ')}]`);
-                console.log(`[LockTCP] [H0 - Heartbeat] IMEI: ${imei} | Estado: ${statusStr} | Voltaje: ${voltageV}V | Batería: ${batteryPercent}% | Señal CSQ: ${signal}`);
+                    await candadosModels.update({
+                        can_estado_candado: statusStr,
+                        can_bateria: batteryPercentIoT,
+                        can_bateria_vehiculo: batteryVeh,
+                        can_senal: signal,
+                        can_fecha_ultimo_comando: new Date(),
+                        can_ultimo_comando: 'H0'
+                    }, {
+                        where: { can_imei: imei }
+                    });
+                } else {
+                    // Horseshoe Heartbeat:
+                    // *CMDR,SH,<IMEI>,<time>,H0,<lockStatus>,<voltage_x100>,<signal_CSQ>#
+                    const lockStatus = parseInt(receivedItems[4 + offset], 10);
+                    const voltageRaw = parseInt(receivedItems[5 + offset], 10) || 0;
+                    const signal     = parseInt(receivedItems[6 + offset], 10) || 0;
+                    const statusStr  = (lockStatus === 0) ? 'open' : 'closed';
 
-                await candadosModels.update({
-                    can_estado_candado: statusStr,
-                    can_bateria: batteryPercent,
-                    can_senal: signal,
-                    can_fecha_ultimo_comando: new Date(),
-                    can_ultimo_comando: 'H0'
-                }, {
-                    where: { can_imei: imei }
-                });
+                    const voltageV = voltageRaw / 100;
+                    const VMIN = 3.50;
+                    const VMAX = 4.20;
+                    const batteryPercent = Math.max(0, Math.min(100,
+                        Math.round(((voltageV - VMIN) / (VMAX - VMIN)) * 100)
+                    ));
+
+                    console.log(`[LockTCP] [H0 Horseshoe] IMEI: ${imei} | Estado: ${statusStr} | Voltaje: ${voltageV}V | Batería: ${batteryPercent}% | Signal: ${signal}`);
+
+                    await candadosModels.update({
+                        can_estado_candado: statusStr,
+                        can_bateria: batteryPercent,
+                        can_senal: signal,
+                        can_fecha_ultimo_comando: new Date(),
+                        can_ultimo_comando: 'H0'
+                    }, {
+                        where: { can_imei: imei }
+                    });
+                }
                 break;
             }
 
@@ -239,8 +294,9 @@ async function handleLockMessage(socket, rawMessage) {
                 // Lock automático: *CMDR,OM,<IMEI>,<time>,L1,<userID>,<timestamp>,<rideTime>#
                 console.log(`[LockTCP] [L1 - Bloqueo manual] IMEI: ${imei} detectó bloqueo manual.`);
 
-                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,L1#\n
-                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,L1#\n`;
+                // Responder ACK obligatorio:
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const ackCmd = `${header},${deviceCode},${imei},000000000000,Re,L1#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
@@ -255,12 +311,12 @@ async function handleLockMessage(socket, rawMessage) {
 
             case 'L0': {
                 // Respuesta de desbloqueo: *CMDR,OM,<IMEI>,<time>,L0,<result>,<userID>,<timestamp>#
-                // receivedItems[5] = result (0=éxito, 1=fallo)
-                const result = parseInt(receivedItems[5], 10);
+                const result = parseInt(receivedItems[4 + offset], 10);
                 console.log(`[LockTCP] [L0 - Respuesta desbloqueo] IMEI: ${imei} | Resultado: ${result === 0 ? 'Exito' : 'Fallo'}`);
 
-                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,L0#\n
-                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,L0#\n`;
+                // Responder ACK obligatorio:
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const ackCmd = `${header},${deviceCode},${imei},000000000000,Re,L0#\n`;
                 sendToLock(socket, ackCmd);
 
                 if (result === 0) {
@@ -277,22 +333,19 @@ async function handleLockMessage(socket, rawMessage) {
 
             case 'D0': {
                 // Reporte de posición: *CMDR,OM,<IMEI>,<time>,D0,<type>,<utcTime>,<status>,<lat>,<NS>,<lon>,<EW>,...#
-                // receivedItems[8] = latitud (ddmm.mmmm)
-                // receivedItems[9] = NS (N/S)
-                // receivedItems[10] = longitud (dddmm.mmmm)
-                // receivedItems[11] = EW (E/W)
-                const latVal = receivedItems[8];
-                const latHem = receivedItems[9];
-                const lonVal = receivedItems[10];
-                const lonHem = receivedItems[11];
+                const latVal = receivedItems[7 + offset];
+                const latHem = receivedItems[8 + offset];
+                const lonVal = receivedItems[9 + offset];
+                const lonHem = receivedItems[10 + offset];
 
                 const latDecimal = convertNmeaToDecimal(latVal, latHem);
                 const lonDecimal = convertNmeaToDecimal(lonVal, lonHem);
 
                 console.log(`[LockTCP] [D0 - Posición GPS] IMEI: ${imei} | Lat: ${latDecimal} | Lon: ${lonDecimal}`);
 
-                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,D0#\n
-                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,D0#\n`;
+                // Responder ACK obligatorio:
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const ackCmd = `${header},${deviceCode},${imei},000000000000,Re,D0#\n`;
                 sendToLock(socket, ackCmd);
 
                 if (latDecimal !== null && lonDecimal !== null) {
@@ -366,12 +419,12 @@ async function handleLockMessage(socket, rawMessage) {
 
             case 'W0': {
                 // Alerta: *CMDR,OM,<IMEI>,<time>,W0,<type>#
-                // type: 1=Movimiento ilegal, 2=Caída, 3=Desmontaje ilegal...
-                const alertType = receivedItems[5];
+                const alertType = receivedItems[4 + offset];
                 console.log(`[LockTCP] [W0 - Alerta] IMEI: ${imei} | Tipo de Alerta: ${alertType}`);
 
-                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,W0#\n
-                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,W0#\n`;
+                // Responder ACK obligatorio:
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const ackCmd = `${header},${deviceCode},${imei},000000000000,Re,W0#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
@@ -385,8 +438,7 @@ async function handleLockMessage(socket, rawMessage) {
 
             case 'C0': {
                 // Solicitud de desbloqueo por tarjeta RFID swipeda en el candado:
-                // *CMDR,OM,<IMEI>,000000000000,C0,0,0,<RFID_HEX>#
-                const rfidHex = receivedItems[7] ? receivedItems[7].trim().toUpperCase() : null;
+                const rfidHex = receivedItems[isShortHeader ? 6 : 7] ? receivedItems[isShortHeader ? 6 : 7].trim().toUpperCase() : null;
                 console.log(`[LockTCP] [C0 - Solicitud de Apertura RFID] IMEI: ${imei} | RFID Hex: ${rfidHex}`);
 
                 if (!rfidHex) {
@@ -395,7 +447,6 @@ async function handleLockMessage(socket, rawMessage) {
                 }
 
                 // 1. Validar la tarjeta en la base de datos (debe estar activa)
-                // Hacemos la consulta extremadamente robusta quitando ceros iniciales y caracteres especiales
                 const { Op } = require('sequelize');
                 const cleanRfidHex = rfidHex.replace(/[^A-Fa-f0-9]/g, '').toUpperCase().replace(/^0+/, '');
 
@@ -419,12 +470,12 @@ async function handleLockMessage(socket, rawMessage) {
 
                 // 2. Disparar el comando L0 para desbloquear el candado
                 const timestamp = Math.floor(Date.now() / 1000);
-                const unlockCommand = `*CMDS,${deviceCode},${imei},000000000000,L0,0,0,${timestamp}#\n`;
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const unlockCommand = `${header},${deviceCode},${imei},000000000000,L0,0,0,${timestamp}#\n`;
                 
                 const sent = sendToLock(socket, unlockCommand);
                 if (sent) {
                     console.log(`[LockTCP] [C0] Comando L0 enviado exitosamente para IMEI ${imei} tras swipe de tarjeta RFID.`);
-                    // 3. Registrar en DB el comando de apertura disparado por RFID
                     await candadosModels.update({
                         can_fecha_ultimo_comando: new Date(),
                         can_ultimo_comando: `C0_RFID_unlock_${rfidHex}`
@@ -439,11 +490,12 @@ async function handleLockMessage(socket, rawMessage) {
 
             case 'I0': {
                 // Get SIM ICCID: *CMDR,OM,<IMEI>,<time>,I0,<iccid>#
-                const iccid = receivedItems[5] ? receivedItems[5].trim() : '';
+                const iccid = receivedItems[4 + offset] ? receivedItems[4 + offset].trim() : '';
                 console.log(`[LockTCP] [I0 - ICCID] IMEI: ${imei} | ICCID: ${iccid}`);
 
-                // Responder ACK obligatorio: *CMDS,<deviceCode>,<IMEI>,000000000000,Re,I0#\n
-                const ackCmd = `*CMDS,${deviceCode},${imei},000000000000,Re,I0#\n`;
+                // Responder ACK obligatorio:
+                const header = (stxFrameHeader === '*SCOR') ? '*SCOS' : '*CMDS';
+                const ackCmd = `${header},${deviceCode},${imei},000000000000,Re,I0#\n`;
                 sendToLock(socket, ackCmd);
 
                 await candadosModels.update({
@@ -453,6 +505,48 @@ async function handleLockMessage(socket, rawMessage) {
                 }, {
                     where: { can_imei: imei }
                 });
+                break;
+            }
+
+            case 'L5': {
+                // M136 or Horseshoe battery lock release response
+                // *SCOR,OM,<IMEI>,<time>,L5,<operation>,<result>#
+                const operation = parseInt(receivedItems[4 + offset], 10);
+                const result = parseInt(receivedItems[5 + offset], 10);
+
+                console.log(`[LockTCP] [L5 Response] IMEI: ${imei} | Operación: ${operation} | Resultado: ${result}`);
+
+                let resultText = '';
+                if (result === 0) resultText = 'success';
+                else if (result === 1) resultText = 'fail';
+                else if (result === 2) resultText = 'timeout';
+                else resultText = String(result);
+
+                await candadosModels.update({
+                    can_fecha_ultimo_comando: new Date(),
+                    can_ultimo_comando: `L5_op_${operation}_res_${resultText}`
+                }, {
+                    where: { can_imei: imei }
+                });
+
+                if (operation === 1) {
+                    const statusStr = (result === 0) ? 'EXITOSO' : 'FALLIDO';
+                    const candadoId = `can_${imei}`;
+                    const pendingSwap = await cambiosBateriasModels.findOne({
+                        where: {
+                            cba_candado_id: candadoId,
+                            cba_estado: 'PENDIENTE'
+                        },
+                        order: [['cba_fecha', 'DESC']]
+                    });
+
+                    if (pendingSwap) {
+                        await pendingSwap.update({
+                            cba_estado: statusStr
+                        });
+                        console.log(`[LockTCP] [L5 Swapping Log] Updated swap ID ${pendingSwap.cba_id} status to ${statusStr}`);
+                    }
+                }
                 break;
             }
 
@@ -556,5 +650,6 @@ function getSocketByImei(imei) {
 module.exports = {
     startLockTcpServer,
     getSocketByImei,
-    sendToLock
+    sendToLock,
+    handleLockMessage
 };

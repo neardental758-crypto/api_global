@@ -27,6 +27,10 @@ const Candado = sequelize.define(
             type: DataTypes.INTEGER,
             defaultValue: 0
         },
+        can_bateria_vehiculo: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0
+        },
         can_estado_candado: {
             type: DataTypes.STRING(50),
             defaultValue: 'closed'
