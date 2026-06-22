@@ -249,6 +249,16 @@ const getMantenimientosPorEstacion = async (req, res) => {
     try {
         const { estacion_id } = matchedData(req);
 
+        let targetEstacionId = estacion_id;
+        if (isNaN(estacion_id)) {
+            const estacion = await estacionModels.findOne({
+                where: { est_estacion: estacion_id }
+            });
+            if (estacion) {
+                targetEstacionId = estacion.est_id;
+            }
+        }
+
         let page = 1;
         let limit = 10;
 
@@ -262,7 +272,7 @@ const getMantenimientosPorEstacion = async (req, res) => {
         }
 
         const offset = (page - 1) * limit;
-        const whereClause = { estacion_id };
+        const whereClause = { estacion_id: targetEstacionId };
         const filterObj = req.query.filter ? JSON.parse(req.query.filter) : req.query;
 
         if (filterObj.operario_id) whereClause.operario_id = filterObj.operario_id;
@@ -1535,15 +1545,24 @@ const getEstadisticasOperariosByEstacion = async (req, res) => {
     const { estacionId } = req.params;
     const { fecha_inicio, fecha_fin, operario_id } = req.query;
     
+    let targetEstacionId = estacionId;
+    if (isNaN(estacionId)) {
+        const estacion = await estacionModels.findOne({
+            where: { est_estacion: estacionId }
+        });
+        if (estacion) {
+            targetEstacionId = estacion.est_id;
+        }
+    }
     
     const checkQuery = `SELECT COUNT(*) as total FROM bc_mantenimientos WHERE estacion_id = :estacionId`;
     const checkResult = await sequelize.query(checkQuery, { 
-      replacements: { estacionId },
+      replacements: { estacionId: targetEstacionId },
       type: sequelize.QueryTypes.SELECT 
     });
     
     let whereConditions = ' AND m.estacion_id = :estacionId';
-    const replacements = { estacionId };
+    const replacements = { estacionId: targetEstacionId };
     
     if (fecha_inicio) {
       whereConditions += ' AND DATE(m.fecha_creacion) >= DATE(:fecha_inicio)';
@@ -1888,7 +1907,18 @@ const exportMantenimientosPorEmpresa = async (req, res) => {
 const exportMantenimientosPorEstacion = async (req, res) => {
     try {
         const { estacion_id } = matchedData(req);
-        const whereClause = { estacion_id };
+
+        let targetEstacionId = estacion_id;
+        if (isNaN(estacion_id)) {
+            const estacion = await estacionModels.findOne({
+                where: { est_estacion: estacion_id }
+            });
+            if (estacion) {
+                targetEstacionId = estacion.est_id;
+            }
+        }
+
+        const whereClause = { estacion_id: targetEstacionId };
         const filterObj = req.query.filter ? JSON.parse(req.query.filter) : req.query;
 
         if (filterObj.operario_id) whereClause.operario_id = filterObj.operario_id;

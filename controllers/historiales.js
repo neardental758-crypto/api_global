@@ -125,7 +125,10 @@ const updateItem = async (req, res) => {
         
         if (body.his_estado === 'FINALIZADA' && historial.his_clave_new) {
             await bicicletasModels.update(
-                { bic_clave: historial.his_clave_new },
+                { 
+                    bic_clave: historial.his_clave_new,
+                    bic_estado: 'DISPONIBLE'
+                },
                 {
                     where: { bic_id: historial.his_bicicleta }
                 }
