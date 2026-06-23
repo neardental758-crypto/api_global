@@ -571,15 +571,20 @@ const patchItem = async (req, res) => {
         }
 
         if (updates && Object.prototype.hasOwnProperty.call(updates, "usu_dir_trabajo")) {
-            try {
-                updates.usu_dir_trabajo = await resolveEstacionDireccionOrThrow(updates.usu_dir_trabajo);
-            } catch (e) {
-                return res.status(400).json({
-                    success: false,
-                    error: "USU_DIR_TRABAJO_INVALID",
-                    message:
-                        "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
-                });
+            const val = updates.usu_dir_trabajo;
+            if (val === null || val === undefined || (typeof val === "string" && (val.trim() === "" || val.trim() === "-" || val.trim() === "No especificado"))) {
+                delete updates.usu_dir_trabajo;
+            } else {
+                try {
+                    updates.usu_dir_trabajo = await resolveEstacionDireccionOrThrow(updates.usu_dir_trabajo);
+                } catch (e) {
+                    return res.status(400).json({
+                        success: false,
+                        error: "USU_DIR_TRABAJO_INVALID",
+                        message:
+                            "La dirección de trabajo debe existir en bc_estaciones.est_direccion.",
+                    });
+                }
             }
         }
 
