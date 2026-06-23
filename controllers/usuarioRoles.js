@@ -5,7 +5,22 @@ const { Op } = require('sequelize');
 
 const getItems = async (req, res) => {
     try {
+        let where = {};
+        if (req.query && req.query.filter) {
+            try {
+                const parsedFilter = JSON.parse(req.query.filter);
+                if (parsedFilter && parsedFilter.roleIds) {
+                    where.ur_rol_id = {
+                        [Op.in]: Array.isArray(parsedFilter.roleIds) ? parsedFilter.roleIds : [parsedFilter.roleIds]
+                    };
+                }
+            } catch (err) {
+                console.error("Error parsing filter in getItems of usuarioRoles controller:", err);
+            }
+        }
+
         const data = await usuariosRolesModels.findAll({
+            where,
             include: [
                 {
                     model: usuarioModels,
