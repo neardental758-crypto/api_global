@@ -89,7 +89,7 @@ const createItem = async (req, res) => {
 
 const updateItem = async (req, res) => {
     try {
-        let pen_id = req.params.pen_id || req.body.id;
+        let pen_id = req.params.pen_id || req.body.id || req.body.pen_id;
         if (!pen_id) {
             return res.status(400).send({ error: "Missing penalty ID" });
         }
@@ -100,12 +100,16 @@ const updateItem = async (req, res) => {
             return res.status(404).send({ error: "Penalty not found" });
         }
         
-        // Update its state to 'INACTIVA' and set the endDate
+        // Update its state to 'INACTIVA', set the endDate, appeal date and reason
         const endDateStr = req.body.endDate || new Date().toISOString();
+        const appealDateStr = req.body.pen_fecha_apelado || new Date().toISOString();
+        const appealReasonStr = req.body.pen_motivo_apelado || 'Sin motivo';
         
         await penalty.update({
             pen_estado: 'INACTIVA',
-            pen_fecha_tiempo_ok: endDateStr
+            pen_fecha_tiempo_ok: endDateStr,
+            pen_fecha_apelado: appealDateStr,
+            pen_motivo_apelado: appealReasonStr
         });
         
         res.send({ status: 'ok' });
