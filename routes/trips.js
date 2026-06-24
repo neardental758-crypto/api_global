@@ -52,6 +52,15 @@ const get5gLoansForOrganization = async (organizationId) => {
     return loans;
 };
 
+const safeISOString = (val) => {
+    if (!val) return null;
+    if (val instanceof Date) {
+        return val.toISOString();
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d.toISOString();
+};
+
 const mapLoanToTrip = (loan) => {
     const userObj = loan.usuario || {};
     const bikeObj = loan.bicicleta || {};
@@ -71,8 +80,8 @@ const mapLoanToTrip = (loan) => {
     return {
         id: loan.pre_id ? String(loan.pre_id) : "",
         state: state,
-        startDate: loan.pre_retiro_fecha ? loan.pre_retiro_fecha.toISOString() : null,
-        endDate: loan.pre_devolucion_fecha ? loan.pre_devolucion_fecha.toISOString() : null,
+        startDate: safeISOString(loan.pre_retiro_fecha),
+        endDate: safeISOString(loan.pre_devolucion_fecha),
         time: loan.pre_duracion ? Math.round(Number(loan.pre_duracion)) : 0,
         distanceKm: 0,
         user: {
