@@ -107,6 +107,10 @@ const mapLoanToTrip = (loan) => {
         feedbacks: {
             rating: commentObj.com_calificacion ? Number(commentObj.com_calificacion) : null,
             comment: commentObj.com_comentario || ""
+        },
+        organization: {
+            id: (userObj.bc_empresa && userObj.bc_empresa.emp_id) ? String(userObj.bc_empresa.emp_id) : "",
+            name: (userObj.bc_empresa && userObj.bc_empresa.emp_nombre) ? userObj.bc_empresa.emp_nombre : (userObj.usu_empresa || "")
         }
     };
 };
