@@ -22,7 +22,7 @@ const get5gLoansForOrganization = async (organizationId) => {
             {
                 model: usuarioModels,
                 as: 'usuario',
-                attributes: ['usu_documento', 'usu_nombre', 'usu_empresa', 'usu_genero', 'usu_email', 'usu_correo', 'usu_telefono', 'usu_prueba'],
+                attributes: ['usu_documento', 'usu_nombre', 'usu_empresa', 'usu_genero', 'usu_email', 'usu_telefono', 'usu_prueba'],
                 required: true,
                 where: {
                     usu_prueba: 0,
