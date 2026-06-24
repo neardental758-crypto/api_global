@@ -5,7 +5,16 @@ const { Op } = require('sequelize');
 
 const getItems = async (req, res) => {
     try {
+        const where = {};
+        if (req.query.ur_rol_id) {
+            const roleIds = req.query.ur_rol_id.split(',');
+            where.ur_rol_id = {
+                [Op.in]: roleIds
+            };
+        }
+
         const data = await usuariosRolesModels.findAll({
+            where,
             include: [
                 {
                     model: usuarioModels,
