@@ -36,7 +36,7 @@ const get5gLoansForOrganization = async (organizationId) => {
             },
             {
                 model: estacionModels,
-                attributes: ['est_estacion', 'est_empresa', 'est_direccion'],
+                attributes: ['est_id', 'est_estacion', 'est_empresa', 'est_direccion'],
                 required: false
             },
             {
@@ -92,6 +92,7 @@ const mapLoanToTrip = (loan) => {
             prueba: userObj.usu_prueba || 0
         },
         startStation: {
+            id: (loan.bc_estacione && loan.bc_estacione.est_id) ? String(loan.bc_estacione.est_id) : "",
             name: startStationName
         },
         endStation: {
@@ -140,6 +141,8 @@ const applyWhereFilter = (trip, cond) => {
             tripVal = trip.bike.number;
         } else if (key === 'startStation.name') {
             tripVal = trip.startStation.name;
+        } else if (key === 'startStationId') {
+            tripVal = trip.startStation.id;
         } else {
             tripVal = trip[key];
         }
