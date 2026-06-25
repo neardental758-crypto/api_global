@@ -8,6 +8,7 @@ const Empresa = require('../models/mysql/empresa');
 const Pasajero = require('../models/mysql/compartidoPasajero');
 const Vehiculo = require('../models/mysql/compartidoVehiculos');
 const { Op } = require('sequelize');
+const socketIoService = require('../services/socketIoService');
 
 const getItems = async (req, res) => {
     try {
@@ -160,6 +161,10 @@ const createItem = async (req, res) => {
     try {
         const { body } = req
         const data = await compartidoSolicitudModels.create(body)
+        const io = socketIoService.getIo();
+        if (io) {
+            io.emit('solicitud_created', data);
+        }
         res.send('Item Create Complete')
     } catch (error) {
         httpError(res, `ERROR_UPDATE_COMPARTIDOSOLICITUD ${error}`)

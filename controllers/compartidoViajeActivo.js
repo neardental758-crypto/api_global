@@ -11,6 +11,7 @@ const Solicitud = require('../models/mysql/compartidoSolicitud');
 const Vehiculo = require('../models/mysql/compartidoVehiculos');
 const Comentarios = require('../models/mysql/compartidoComentarios');
 const Conductor = require('../models/mysql/compartidoConductor');
+const socketIoService = require('../services/socketIoService');
 
 const getItems = async (req, res) => {
     try {
@@ -163,6 +164,10 @@ const createItem = async (req, res) => {
     try {
         const { body } = req
         const data = await compartidoViajeActivoModels.create(body)
+        const io = socketIoService.getIo();
+        if (io) {
+            io.emit('trip_created', data);
+        }
         res.send('ok')
     } catch (error) {
         httpError(res, "ERROR_CREATE_COMPARTIDOVIAJEACTIVO")
