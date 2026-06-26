@@ -216,7 +216,7 @@ const getItemAllPrestamoActivosFiltered = async (req, res) => {
       const limit = parseInt(req.query.limit) || 10;
       const offset = (page - 1) * limit;
       let currentDate = new Date();
-      currentDate.setHours(currentDate.getHours() - 5 );
+      currentDate.setHours(currentDate.getHours() - 7 ); // 5 hours GMT-5 offset + 2 hours buffer
       currentDate = currentDate.toISOString();
     // Falta agretar filtro por metodo de transporte, pago, posicion
       const data = await compartidoViajeActivoModels.findAll({
@@ -229,7 +229,7 @@ const getItemAllPrestamoActivosFiltered = async (req, res) => {
         include: [
           {
             model: Usuario,
-            attributes: ['usu_documento', 'usu_nombre', 'usu_viajes', 'usu_calificacion'],
+            attributes: ['usu_documento', 'usu_nombre', 'usu_img'],
             include: [
               {
                 model: Conductor,
@@ -300,7 +300,7 @@ const getItemAllPrestamoActivosFiltered = async (req, res) => {
         newDate.setHours(newDate.getHours() - hours);
         return newDate;
     };
-    const fechaParaFiltrar = fechaInicio ? subtractHours(fechaInicio, 2).toISOString(): subtractHours(new Date(), 2).toISOString();
+    const fechaParaFiltrar = fechaInicio ? subtractHours(fechaInicio, 7).toISOString(): subtractHours(new Date(), 7).toISOString(); // 5 hours GMT-5 offset + 2 hours buffer
     let { pago, transporte } = req.query;
     if (pago) { pago = pago.split(','); } else { pago = []; }
     if (transporte) { transporte = transporte.split(','); } else { transporte = []; }
@@ -321,7 +321,7 @@ const getItemAllPrestamoActivosFiltered = async (req, res) => {
             include: [
                 {
                     model: Usuario,
-                    attributes: ['usu_documento', 'usu_nombre', 'usu_viajes', 'usu_calificacion'],
+                    attributes: ['usu_documento', 'usu_nombre', 'usu_img'],
                 },
                 {
                     model: Vehiculo,
