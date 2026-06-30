@@ -136,7 +136,7 @@ const getNotificationUsersByOrganization = async (req, res) => {
 
     const userDocumentos = users.map(u => u.documento);
 
-    const estadosPrestamoActivo = ['ACTIVA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA'];
+    const estadosPrestamoActivo = ['ACTIVA', 'PRESTAMO DE EMERGENCIA'];
     
     const prestamosActivos = await Prestamos.findAll({
       where: {
