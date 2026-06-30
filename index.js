@@ -9,7 +9,7 @@ const cors = require('cors');
 const { dbConnectMysql } = require('./config/mysql');
 const app = express();
 const cron = require('./cron');
-const { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup, startParqueoNocturnoCleanup, startParqueoVencimientoCleanup } = require('./utils/cronJobs');
+const { startSessionCleanup, startAgendamientosCleanup, startReservationsCleanup, startParqueoNocturnoCleanup, startParqueoVencimientoCleanup, startPrestamosVencidosNotification } = require('./utils/cronJobs');
 const path = require('path');
 
 app.use(cors());
@@ -25,6 +25,7 @@ startAgendamientosCleanup();
 startReservationsCleanup();
 startParqueoNocturnoCleanup();
 startParqueoVencimientoCleanup();
+startPrestamosVencidosNotification();
 
 //RUTAS
 app.use("/api", require("./routes/"));

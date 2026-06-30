@@ -1,7 +1,23 @@
 const cron = require('node-cron');
 const SesionUsuario = require('../models/mysql/sesionUsuario');
-const { agendamientoOperarioModels, agendamientoIncumplidoModels, estacionModels, mantenimientoModels, reservasModels, bicicletasModels, rentaParqueoModels, reservasParqueoModels, lugarParqueoModels } = require('../models');
+const { 
+  agendamientoOperarioModels, 
+  agendamientoIncumplidoModels, 
+  estacionModels, 
+  mantenimientoModels, 
+  reservasModels, 
+  bicicletasModels, 
+  rentaParqueoModels, 
+  reservasParqueoModels, 
+  lugarParqueoModels,
+  prestamosModels,
+  tokenMsnModels,
+  usuarioModels
+} = require('../models');
 const { Op } = require('sequelize');
+const { sequelize } = require('../config/mysql');
+const nodemailer = require('nodemailer');
+const admin = require('../config/firebase');
 
 const startSessionCleanup = () => {
   cron.schedule('0 */6 * * *', async () => {
@@ -337,6 +353,155 @@ const startParqueoVencimientoCleanup = () => {
   cron.schedule('0 7-21 * * *', verificarVencimientosParqueo);
 };
 
+const verificarPrestamosVencidos = async () => {
+  try {
+    console.log('🔄 [CRON] Iniciando control de préstamos vencidos...');
+    const ahora = new Date();
+
+    // Query active loans that are expired and have not been notified
+    const prestamosVencidos = await prestamosModels.findAll({
+      where: {
+        pre_estado: 'ACTIVA',
+        pre_devolucion_fecha: {
+          [Op.lte]: ahora,
+          [Op.ne]: null
+        },
+        [Op.or]: [
+          { pre_finalizado_por: null },
+          { 
+            pre_finalizado_por: {
+              [Op.notLike]: 'NOTIFICADO_VENCIDO_%'
+            }
+          }
+        ]
+      }
+    });
+
+    if (prestamosVencidos.length === 0) {
+      console.log('🏁 [CRON] No hay préstamos vencidos pendientes de notificación.');
+      return;
+    }
+
+    console.log(`🚲 [CRON] Se encontraron ${prestamosVencidos.length} préstamos vencidos. Enviando recordatorios...`);
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: 'Servicio@bicyclecapital.co',
+        pass: 'fyam ecci wqby fhaj'
+      }
+    });
+
+    for (const prestamo of prestamosVencidos) {
+      try {
+        const userToken = await tokenMsnModels.findOne({
+          where: { documento: prestamo.pre_usuario },
+          include: [{
+            model: usuarioModels,
+            attributes: ['usu_nombre'],
+            as: 'bc_usuario'
+          }]
+        });
+
+        if (!userToken) {
+          console.log(`⚠️ [CRON] No se encontró token/email para el usuario ${prestamo.pre_usuario}. Marcando prestamo en pre_finalizado_por para evitar bucle.`);
+          await prestamosModels.update(
+            { pre_finalizado_por: `NOTIFICADO_VENCIDO_NO_TOKEN_${new Date().toISOString()}` },
+            { where: { pre_id: prestamo.pre_id } }
+          );
+          continue;
+        }
+
+        const nombreUsuario = userToken.bc_usuario ? userToken.bc_usuario.usu_nombre : 'Usuario';
+        const emailUsuario = userToken.email;
+        const pushToken = userToken.token;
+
+        const subject = "¡Recordatorio de entrega de vehículo! 🚲";
+        const message = `Hola ${nombreUsuario}, te recordamos de manera amigable que el tiempo de tu préstamo de bicicleta ha terminado y debes entregar el vehículo. ¡Muchas gracias por tu colaboración!`;
+
+        let notificacionEnviada = false;
+
+        // 1. Send Firebase Push Notification if token exists
+        if (pushToken && pushToken.trim() !== '' && pushToken.length > 140) {
+          try {
+            const pushMessage = {
+              token: pushToken,
+              notification: {
+                title: subject,
+                body: message
+              },
+              android: {
+                priority: 'high',
+                notification: {
+                  sound: 'default',
+                  channelId: 'high_importance_channel'
+                }
+              },
+              apns: {
+                headers: {
+                  'apns-priority': '10',
+                  'apns-push-type': 'alert'
+                },
+                payload: {
+                  aps: {
+                    alert: {
+                      title: subject,
+                      body: message
+                    },
+                    sound: 'default',
+                    badge: 1
+                  }
+                }
+              }
+            };
+
+            await admin.messaging().send(pushMessage);
+            console.log(`📲 [CRON] Push enviado con éxito a ${nombreUsuario} (${prestamo.pre_usuario})`);
+            notificacionEnviada = true;
+          } catch (pushError) {
+            console.error(`❌ [CRON] Error al enviar Push a ${nombreUsuario}:`, pushError.message);
+          }
+        }
+
+        // 2. Send Nodemailer Email
+        if (emailUsuario && emailUsuario.trim() !== '') {
+          try {
+            const emailOptions = {
+              from: 'Servicio@bicyclecapital.co',
+              to: emailUsuario,
+              subject: subject,
+              html: `<p>${message}</p>`
+            };
+
+            await transporter.sendMail(emailOptions);
+            console.log(`📧 [CRON] Correo enviado con éxito a ${emailUsuario}`);
+            notificacionEnviada = true;
+          } catch (emailError) {
+            console.error(`❌ [CRON] Error al enviar correo a ${emailUsuario}:`, emailError.message);
+          }
+        }
+
+        // Mark as notified by setting pre_finalizado_por
+        await prestamosModels.update(
+          { pre_finalizado_por: `NOTIFICADO_VENCIDO_${new Date().toISOString()}` },
+          { where: { pre_id: prestamo.pre_id } }
+        );
+
+      } catch (userError) {
+        console.error(`❌ [CRON] Error procesando préstamo ${prestamo.pre_id} para usuario ${prestamo.pre_usuario}:`, userError.message);
+      }
+    }
+
+    console.log('🏁 [CRON] Control de préstamos vencidos finalizado.');
+  } catch (error) {
+    console.error('❌ [CRON] Error crítico en control de vencimientos de préstamos:', error);
+  }
+};
+
+const startPrestamosVencidosNotification = () => {
+  cron.schedule('0 17 * * *', verificarPrestamosVencidos);
+};
+
 module.exports = { 
   startSessionCleanup, 
   startAgendamientosCleanup, 
@@ -345,5 +510,7 @@ module.exports = {
   startParqueoNocturnoCleanup,
   startParqueoVencimientoCleanup,
   limpiarParqueoNocturno,
-  verificarVencimientosParqueo
+  verificarVencimientosParqueo,
+  startPrestamosVencidosNotification,
+  verificarPrestamosVencidos
 };
