@@ -159,7 +159,31 @@ const getNotificationUsersByOrganization = async (req, res) => {
       group: ['pre_usuario']
     });
 
+    const estadosPrestamoPersonalizado = ['PRESTAMO PERSONALIZADO'];
+    
+    const prestamosPersonalizados = await Prestamos.findAll({
+      where: {
+        pre_usuario: { [Op.in]: userDocumentos },
+        [Op.and]: [
+          { pre_estado: { [Op.ne]: null } },
+          {
+            [Op.or]: [
+              { pre_estado: { [Op.in]: estadosPrestamoPersonalizado } },
+              {
+                pre_estado: {
+                  [Op.in]: estadosPrestamoPersonalizado.map((e) => e.toLowerCase()),
+                },
+              },
+            ],
+          },
+        ],
+      },
+      attributes: ['pre_usuario'],
+      group: ['pre_usuario']
+    });
+
     const usuariosConPrestamos = new Set(prestamosActivos.map(p => p.pre_usuario));
+    const usuariosConPrestamosPersonalizados = new Set(prestamosPersonalizados.map(p => p.pre_usuario));
 
     const formattedUsers = users.map(user => ({
       documento: user.documento,
@@ -170,7 +194,8 @@ const getNotificationUsersByOrganization = async (req, res) => {
       usu_empresa: user.bc_usuario ? user.bc_usuario.usu_empresa : '',
       usu_estacion: user.bc_usuario ? user.bc_usuario.usu_dir_trabajo : '',
       usu_habilitado: user.bc_usuario ? user.bc_usuario.usu_habilitado : null,
-      tiene_prestamos_activos: usuariosConPrestamos.has(user.documento)
+      tiene_prestamos_activos: usuariosConPrestamos.has(user.documento),
+      tiene_prestamos_personalizados: usuariosConPrestamosPersonalizados.has(user.documento)
     }));
     
     res.json(formattedUsers);
