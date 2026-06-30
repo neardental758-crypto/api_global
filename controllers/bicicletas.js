@@ -1492,9 +1492,38 @@ const updateKey = async (req, res) => {
     }
 };
 
+const bulkMicrosistema = async (req, res) => {
+    try {
+        const { bic_estacion } = req.body;
+        if (!bic_estacion) {
+            return res.status(400).json({
+                success: false,
+                message: "La estación (bic_estacion) es requerida."
+            });
+        }
+
+        const [affectedCount] = await bicicletasModels.update(
+            { bic_descripcion: "microsistema" },
+            { where: { bic_estacion: bic_estacion } }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Se cambiaron ${affectedCount} vehículos a microsistema en la estación ${bic_estacion}.`,
+            affectedCount
+        });
+    } catch (error) {
+        console.error("Error en bulkMicrosistema:", error);
+        res.status(500).json({
+            success: false,
+            message: "Error al cambiar vehículos a microsistema"
+        });
+    }
+};
+
 module.exports = {
     getItems, getItem, getItemNumero, getItemEstacion, getItemFlota, createItem, updateItem, deleteItem, getItems_cortezza, get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem,
     getBicisByEstacion,getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa,
     getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
-    getReservaActivaPorBicicleta, updateKey
+    getReservaActivaPorBicicleta, updateKey, bulkMicrosistema
 }

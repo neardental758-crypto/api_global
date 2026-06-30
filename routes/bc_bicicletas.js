@@ -7,7 +7,7 @@ const { validatorCreateBicycle, validatorGetBicycle, validatorGetNombre,
 const { getItems, createItem, getItem, getItemEstacion, getItemFlota, updateItem, getItemNumero, getItemsFilterToBicicleteros, getBicisEmpresa, patchItem, getItems_cortezza,
      get_id_cortezza, getItemEstacion_cortezza, getItemFlota_cortezza, getBicisByEstacion,
      getBicicletasPorEstado, getBicicletasPorEstadoYEstacion, getBicicletasPorEstadoYEmpresa, getMantenimientosPorBicicleta,updateEstadoDash,syncBikesStates,getBikeMetrics,
-     getReservaActivaPorBicicleta, updateKey
+     getReservaActivaPorBicicleta, updateKey, bulkMicrosistema
 } = require('../controllers/bicicletas');
 const authMiddleware = require('../middleware/session');
 
@@ -42,6 +42,8 @@ router.get("/empresa/:empresaId", authMiddleware(["all"]), validatorGetEmpresa, 
 router.get("/estacion/:est_estacion",authMiddleware(["all"]), validatorGetEstacion, getBicisByEstacion);
 
 router.patch("/:bic_id", authMiddleware(["all"]), validatorPatchBicycle, patchItem);
+
+router.post("/bulk-microsistema", authMiddleware(["all"]), bulkMicrosistema);
 
 // Obtener mantenimientos por bicicleta
 router.get("/bicicleta/:bicicletaId", authMiddleware(["all"]), validatorGetPorBicicleta, getMantenimientosPorBicicleta);
