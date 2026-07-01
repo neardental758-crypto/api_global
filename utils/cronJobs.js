@@ -692,6 +692,7 @@ const verificarNotificacionesProgramadas = async () => {
           const messageType = task.prog_tipo_mensaje;
           const subject = task.prog_titulo;
           const message = task.prog_mensaje;
+          const imageUrl = task.prog_image_url;
 
           // 1. Enviar Email
           if (['email', 'email-push', 'email-in-app', 'all'].includes(messageType)) {
@@ -703,14 +704,32 @@ const verificarNotificacionesProgramadas = async () => {
                 text: message
               };
               
+              const attachments = [];
               if (firmaBase64) {
-                emailOptions.attachments = [{
+                attachments.push({
                   filename: 'firma.png',
                   content: firmaBase64,
                   encoding: 'base64',
                   cid: 'firma'
-                }];
+                });
+              }
+
+              if (imageUrl && imageUrl.startsWith('data:image')) {
+                attachments.push({
+                  filename: 'imagen.png',
+                  content: imageUrl.split(',')[1],
+                  encoding: 'base64',
+                  cid: 'imagen'
+                });
+                emailOptions.html = `<p>${message}</p><img src="cid:imagen" style="max-width: 200px;"><br><br>${firmaBase64 ? '<img src="cid:firma" style="max-width: 400px; width: 100%;">' : ''}`;
+              } else if (imageUrl) {
+                emailOptions.html = `<p>${message}</p><img src="${imageUrl}" style="max-width: 200px;"><br><br>${firmaBase64 ? '<img src="cid:firma" style="max-width: 400px; width: 100%;">' : ''}`;
+              } else if (firmaBase64) {
                 emailOptions.html = `<p>${message}</p><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+              }
+
+              if (attachments.length > 0) {
+                emailOptions.attachments = attachments;
               }
               
               await transporter.sendMail(emailOptions);
@@ -729,19 +748,22 @@ const verificarNotificacionesProgramadas = async () => {
                   token: user.token,
                   notification: {
                     title: subject || 'Notificación',
-                    body: message || 'Mensaje'
+                    body: message || 'Mensaje',
+                    ...(imageUrl ? { image: imageUrl } : {})
                   },
                   android: {
                     priority: 'high',
                     notification: {
                       sound: 'default',
-                      channelId: 'high_importance_channel'
+                      channelId: 'high_importance_channel',
+                      ...(imageUrl ? { image: imageUrl } : {})
                     },
                     data: {
                       click_action: 'FLUTTER_NOTIFICATION_CLICK',
                       messageType: messageType,
                       messageId: messageId,
-                      isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString()
+                      isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
+                      ...(imageUrl ? { imageUrl: imageUrl } : {})
                     }
                   },
                   apns: {
@@ -759,13 +781,17 @@ const verificarNotificacionesProgramadas = async () => {
                         badge: 1,
                         contentAvailable: true
                       }
+                    },
+                    fcmOptions: {
+                      ...(imageUrl ? { image: imageUrl } : {})
                     }
                   },
                   data: {
                     messageType: messageType,
                     messageId: messageId,
                     isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
-                    timestamp: Date.now().toString()
+                    timestamp: Date.now().toString(),
+                    ...(imageUrl ? { imageUrl: imageUrl } : {})
                   }
                 };
 

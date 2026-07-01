@@ -36,6 +36,9 @@ const NotificacionesProgramadas = sequelize.define(
         prog_filter_type: {
             type: DataTypes.STRING,
         },
+        prog_image_url: {
+            type: DataTypes.STRING(2048),
+        },
         prog_es_recurrente: {
             type: DataTypes.BOOLEAN,
             defaultValue: false

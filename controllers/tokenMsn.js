@@ -336,48 +336,55 @@ const sendNotificationMessage = async (req, res) => {
             const messageId = `msg_${Date.now()}_${user.documento}`;
             
     const pushMessage = {
-  token: user.token,
-  notification: {
-    title: subject || 'Notificación',
-    body: message || 'Mensaje'
-  },
-  android: {
-    priority: 'high',
-    notification: {
-      sound: 'default',
-      channelId: 'high_importance_channel'
-    },
-    data: {
-      click_action: 'FLUTTER_NOTIFICATION_CLICK',
-      messageType: messageType,
-      messageId: messageId,
-      isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString()
-    }
-  },
-  apns: {
-    headers: {
-      'apns-priority': '10',
-      'apns-push-type': 'alert'
-    },
-    payload: {
-      aps: {
-        alert: {
-          title: subject || 'Notificación',
-          body: message || 'Mensaje'
+      token: user.token,
+      notification: {
+        title: subject || 'Notificación',
+        body: message || 'Mensaje',
+        ...(imageUrl ? { image: imageUrl } : {})
+      },
+      android: {
+        priority: 'high',
+        notification: {
+          sound: 'default',
+          channelId: 'high_importance_channel',
+          ...(imageUrl ? { image: imageUrl } : {})
         },
-        sound: 'default',
-        badge: 1,
-        contentAvailable: true
+        data: {
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          messageType: messageType,
+          messageId: messageId,
+          isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
+          ...(imageUrl ? { imageUrl: imageUrl } : {})
+        }
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10',
+          'apns-push-type': 'alert'
+        },
+        payload: {
+          aps: {
+            alert: {
+              title: subject || 'Notificación',
+              body: message || 'Mensaje'
+            },
+            sound: 'default',
+            badge: 1,
+            contentAvailable: true
+          }
+        },
+        fcmOptions: {
+          ...(imageUrl ? { image: imageUrl } : {})
+        }
+      },
+      data: {
+        messageType: messageType,
+        messageId: messageId,
+        isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
+        timestamp: Date.now().toString(),
+        ...(imageUrl ? { imageUrl: imageUrl } : {})
       }
-    }
-  },
-  data: {
-    messageType: messageType,
-    messageId: messageId,
-    isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
-    timestamp: Date.now().toString()
-  }
-    } 
+    }; 
                 
             const pushResponse = await admin.messaging().send(pushMessage);
             pushResults.push({ 
@@ -523,7 +530,7 @@ const createScheduledNotification = async (req, res) => {
     const { 
       organizationId, remitente, titulo, mensaje, tipo_mensaje,
       destinatarios, send_to_type, selected_estacion, filter_type,
-      es_recurrente, fecha, hora, dia_semana
+      es_recurrente, fecha, hora, dia_semana, imageUrl
     } = req.body;
 
     const data = await NotificacionesProgramadas.create({
@@ -536,6 +543,7 @@ const createScheduledNotification = async (req, res) => {
       prog_send_to_type: send_to_type || 'selected',
       prog_selected_estacion: selected_estacion || '',
       prog_filter_type: filter_type || 'all',
+      prog_image_url: imageUrl || '',
       prog_es_recurrente: es_recurrente || false,
       prog_fecha: fecha || '',
       prog_hora: hora || '',
