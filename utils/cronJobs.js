@@ -854,7 +854,7 @@ const verificarNotificacionesProgramadas = async () => {
 };
 
 const startScheduledNotifications = () => {
-  cron.schedule('* * * * *', verificarNotificacionesProgramadas);
+  cron.schedule('*/30 * * * *', verificarNotificacionesProgramadas);
 };
 
 module.exports = { 
