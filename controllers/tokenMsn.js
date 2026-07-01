@@ -6,6 +6,7 @@ const Usuario = require('../models/mysql/usuario');
 const TokenMsn = require('../models/mysql/tokenMsn');
 const Prestamos = require('../models/mysql/prestamos');
 const HistorialNotificaciones = require('../models/mysql/historialNotificaciones');
+const NotificacionesProgramadas = require('../models/mysql/notificacionesProgramadas');
 
 const admin = require('../config/firebase');
 const { Op } = require('sequelize');
@@ -517,6 +518,73 @@ const getNotificationHistory = async (req, res) => {
   }
 };
 
+const createScheduledNotification = async (req, res) => {
+  try {
+    const { 
+      organizationId, remitente, titulo, mensaje, tipo_mensaje,
+      destinatarios, send_to_type, selected_estacion, filter_type,
+      es_recurrente, fecha, hora, dia_semana
+    } = req.body;
+
+    const data = await NotificacionesProgramadas.create({
+      prog_organizacion_id: organizationId,
+      prog_remitente: remitente || 'Sistema',
+      prog_titulo: titulo || 'Notificación Programada',
+      prog_mensaje: mensaje || '',
+      prog_tipo_mensaje: tipo_mensaje || 'all',
+      prog_destinatarios: JSON.stringify(destinatarios || []),
+      prog_send_to_type: send_to_type || 'selected',
+      prog_selected_estacion: selected_estacion || '',
+      prog_filter_type: filter_type || 'all',
+      prog_es_recurrente: es_recurrente || false,
+      prog_fecha: fecha || '',
+      prog_hora: hora || '',
+      prog_dia_semana: Array.isArray(dia_semana) ? dia_semana.join(',') : (dia_semana || ''),
+      prog_estado: 'PENDIENTE',
+      prog_fecha_creacion: new Date()
+    });
+
+    res.json({ success: true, message: 'Notificación programada exitosamente', data });
+  } catch (error) {
+    console.error('Error creating scheduled notification:', error);
+    httpError(res, "ERROR_CREATE_SCHEDULED_NOTIFICATION");
+  }
+};
+
+const getScheduledNotifications = async (req, res) => {
+  try {
+    const { organizationId } = req.params;
+
+    const data = await NotificacionesProgramadas.findAll({
+      where: {
+        prog_organizacion_id: organizationId,
+        prog_estado: 'PENDIENTE'
+      },
+      order: [['prog_fecha_creacion', 'DESC']]
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error fetching scheduled notifications:', error);
+    httpError(res, "ERROR_GET_SCHEDULED_NOTIFICATIONS");
+  }
+};
+
+const deleteScheduledNotification = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await NotificacionesProgramadas.destroy({
+      where: { prog_id: id }
+    });
+
+    res.json({ success: true, message: 'Notificación programada cancelada correctamente' });
+  } catch (error) {
+    console.error('Error deleting scheduled notification:', error);
+    httpError(res, "ERROR_DELETE_SCHEDULED_NOTIFICATION");
+  }
+};
+
 module.exports = {
-    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory
+    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory, createScheduledNotification, getScheduledNotifications, deleteScheduledNotification
 }

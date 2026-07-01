@@ -12,7 +12,9 @@ const {
   lugarParqueoModels,
   prestamosModels,
   tokenMsnModels,
-  usuarioModels
+  usuarioModels,
+  historialNotificacionesModels,
+  notificacionesProgramadasModels
 } = require('../models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/mysql');
@@ -502,6 +504,333 @@ const startPrestamosVencidosNotification = () => {
   cron.schedule('0 17 * * *', verificarPrestamosVencidos);
 };
 
+const verificarNotificacionesProgramadas = async () => {
+  try {
+    const ahoraUTC = new Date();
+    // Ajustar a la hora de Bogotá (-5 horas)
+    const ahoraBogota = new Date(ahoraUTC.getTime() - (5 * 60 * 60 * 1000));
+    
+    const año = ahoraBogota.getUTCFullYear();
+    const mes = String(ahoraBogota.getUTCMonth() + 1).padStart(2, '0');
+    const dia = String(ahoraBogota.getUTCDate()).padStart(2, '0');
+    const fechaHoyStr = `${año}-${mes}-${dia}`; // 'YYYY-MM-DD'
+    
+    const hora = String(ahoraBogota.getUTCHours()).padStart(2, '0');
+    const minutos = String(ahoraBogota.getUTCMinutes()).padStart(2, '0');
+    const horaHoyStr = `${hora}:${minutos}`; // 'HH:MM'
+    
+    const diasSemana = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+    const diaSemanaHoy = diasSemana[ahoraBogota.getUTCDay()];
+    
+    console.log(`⏰ [CRON NOTIFICACIONES] Verificando para fecha: ${fechaHoyStr}, hora: ${horaHoyStr}, día: ${diaSemanaHoy}`);
+
+    // Buscar notificaciones programadas activas (PENDIENTE)
+    const programadas = await notificacionesProgramadasModels.findAll({
+      where: {
+        prog_estado: 'PENDIENTE'
+      }
+    });
+
+    const matchingTasks = [];
+
+    for (const task of programadas) {
+      if (task.prog_es_recurrente) {
+        // Recurrente: Verificar si el día de hoy coincide con los días programados y la hora coincide
+        const diasProgramados = task.prog_dia_semana ? task.prog_dia_semana.split(',').map(d => d.trim().toLowerCase()) : [];
+        if (diasProgramados.includes(diaSemanaHoy) && task.prog_hora <= horaHoyStr) {
+          // Verificar que no se haya ejecutado ya hoy
+          const ultimaEjecucion = task.prog_ultima_ejecucion ? new Date(task.prog_ultima_ejecucion) : null;
+          if (!ultimaEjecucion || (ahoraBogota.getUTCDate() !== ultimaEjecucion.getDate() || ahoraBogota.getUTCMonth() !== ultimaEjecucion.getMonth() || ahoraBogota.getUTCFullYear() !== ultimaEjecucion.getFullYear())) {
+            matchingTasks.push(task);
+          }
+        }
+      } else {
+        // Única vez: Verificar que la fecha programada sea <= hoy y la hora programada sea <= ahora
+        if (task.prog_fecha <= fechaHoyStr && task.prog_hora <= horaHoyStr) {
+          matchingTasks.push(task);
+        }
+      }
+    }
+
+    if (matchingTasks.length === 0) {
+      return;
+    }
+
+    console.log(`🚀 [CRON NOTIFICACIONES] Se encontraron ${matchingTasks.length} tareas programadas para ejecutar.`);
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: 'Servicio@bicyclecapital.co',
+        pass: 'fyam ecci wqby fhaj'
+      }
+    });
+
+    const fs = require('fs');
+    const path = require('path');
+    let firmaBase64 = '';
+    try {
+      const firmaPath = path.join(__dirname, '../assets/firma_milena.jpg');
+      if (fs.existsSync(firmaPath)) {
+        firmaBase64 = fs.readFileSync(firmaPath).toString('base64');
+      }
+    } catch (e) {
+      console.log('Firma no disponible:', e.message);
+    }
+
+    for (const task of matchingTasks) {
+      try {
+        // Cambiar estado a PROCESANDO para evitar doble ejecución
+        await notificacionesProgramadasModels.update(
+          { prog_estado: 'PROCESANDO' },
+          { where: { prog_id: task.prog_id } }
+        );
+
+        let targetUsers = [];
+        const organizationId = task.prog_organizacion_id;
+        const sendToType = task.prog_send_to_type;
+        const filterType = task.prog_filter_type;
+        const selectedEstacion = task.prog_selected_estacion;
+        
+        let recipientIds = [];
+        try {
+          recipientIds = JSON.parse(task.prog_destinatarios || '[]');
+        } catch (e) {
+          recipientIds = [];
+        }
+
+        // Cargar usuarios destinatarios
+        const Empresa = require('../models/mysql/empresa');
+        const TokenMsn = require('../models/mysql/tokenMsn');
+        const Usuario = require('../models/mysql/usuario');
+        const Prestamos = require('../models/mysql/prestamos');
+
+        const empresa = await Empresa.findOne({
+          where: { emp_id: organizationId }
+        });
+
+        if (!empresa) {
+          console.log(`❌ [CRON NOTIFICACIONES] Empresa no encontrada para ID: ${organizationId}`);
+          await notificacionesProgramadasModels.update(
+            { prog_estado: 'FALLIDO', prog_ultima_ejecucion: ahoraUTC },
+            { where: { prog_id: task.prog_id } }
+          );
+          continue;
+        }
+
+        // Obtener todos los tokens/usuarios de la empresa
+        const allEmpresaUsers = await TokenMsn.findAll({
+          include: [{
+            model: Usuario,
+            where: { usu_empresa: empresa.emp_nombre },
+            attributes: ['usu_nombre', 'usu_ciudad', 'usu_empresa', 'usu_dir_trabajo', 'usu_habilitado'],
+            as: 'bc_usuario'
+          }],
+          attributes: ['documento', 'email', 'token']
+        });
+
+        // Filtrar según el tipo de envío y filtros seleccionados
+        let filteredUsers = [...allEmpresaUsers];
+
+        // 1. Filtrar por tipo de destinatario (seleccionados, estación o todos)
+        if (sendToType === 'selected' && recipientIds.length > 0) {
+          filteredUsers = filteredUsers.filter(u => recipientIds.includes(u.documento));
+        } else if (sendToType === 'station' && selectedEstacion) {
+          // Filtrar por estación
+          const Estacion = require('../models/mysql/estacion');
+          const estacionSeleccionada = await Estacion.findOne({
+            where: { est_estacion: selectedEstacion }
+          });
+          if (estacionSeleccionada) {
+            filteredUsers = filteredUsers.filter(
+              (user) => user.bc_usuario && user.bc_usuario.usu_dir_trabajo === estacionSeleccionada.est_direccion
+            );
+          }
+        }
+
+        // 2. Filtrar por estado del usuario (nuevos, activos, etc.)
+        if (filterType !== 'all') {
+          const userDocumentos = filteredUsers.map(u => u.documento);
+          
+          if (filterType === 'nuevos') {
+            filteredUsers = filteredUsers.filter(u => u.bc_usuario && u.bc_usuario.usu_habilitado === 0);
+          } else if (filterType === 'activos') {
+            filteredUsers = filteredUsers.filter(u => u.bc_usuario && u.bc_usuario.usu_habilitado === 1);
+          } else if (filterType === 'prestamos' || filterType === 'personalizados') {
+            const estadosBuscar = filterType === 'prestamos' ? ['ACTIVA', 'PRESTAMO DE EMERGENCIA'] : ['PRESTAMO PERSONALIZADO'];
+            const prestamosActivos = await Prestamos.findAll({
+              where: {
+                pre_usuario: { [Op.in]: userDocumentos },
+                pre_estado: { [Op.ne]: null },
+                [Op.or]: [
+                  { pre_estado: { [Op.in]: estadosBuscar } },
+                  { pre_estado: { [Op.in]: estadosBuscar.map(e => e.toLowerCase()) } }
+                ]
+              },
+              attributes: ['pre_usuario'],
+              group: ['pre_usuario']
+            });
+            const docsConPrestamo = new Set(prestamosActivos.map(p => p.pre_usuario));
+            filteredUsers = filteredUsers.filter(u => docsConPrestamo.has(u.documento));
+          }
+        }
+
+        if (filteredUsers.length === 0) {
+          console.log(`⚠️ [CRON NOTIFICACIONES] No hay usuarios destinatarios para la tarea: ${task.prog_id}`);
+          await notificacionesProgramadasModels.update(
+            { prog_estado: task.prog_es_recurrente ? 'PENDIENTE' : 'ENVIADO', prog_ultima_ejecucion: ahoraUTC },
+            { where: { prog_id: task.prog_id } }
+          );
+          continue;
+        }
+
+        const emailResults = [];
+        const pushResults = [];
+
+        // Ejecutar envíos
+        for (const user of filteredUsers) {
+          const messageType = task.prog_tipo_mensaje;
+          const subject = task.prog_titulo;
+          const message = task.prog_mensaje;
+
+          // 1. Enviar Email
+          if (['email', 'email-push', 'email-in-app', 'all'].includes(messageType)) {
+            try {
+              let emailOptions = { 
+                from: 'Servicio@bicyclecapital.co',
+                to: user.email,
+                subject: subject,
+                text: message
+              };
+              
+              if (firmaBase64) {
+                emailOptions.attachments = [{
+                  filename: 'firma.png',
+                  content: firmaBase64,
+                  encoding: 'base64',
+                  cid: 'firma'
+                }];
+                emailOptions.html = `<p>${message}</p><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+              }
+              
+              await transporter.sendMail(emailOptions);
+              emailResults.push({ documento: user.documento, success: true, type: 'email' });
+            } catch (emailError) {
+              emailResults.push({ documento: user.documento, success: false, type: 'email', error: emailError.message });
+            }
+          }
+
+          // 2. Enviar Push
+          if (['push', 'email-push', 'in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType)) {
+            if (user.token && user.token.trim() !== '' && user.token.length > 140) {
+              try {
+                const messageId = `msg_${Date.now()}_${user.documento}`;
+                const pushMessage = {
+                  token: user.token,
+                  notification: {
+                    title: subject || 'Notificación',
+                    body: message || 'Mensaje'
+                  },
+                  android: {
+                    priority: 'high',
+                    notification: {
+                      sound: 'default',
+                      channelId: 'high_importance_channel'
+                    },
+                    data: {
+                      click_action: 'FLUTTER_NOTIFICATION_CLICK',
+                      messageType: messageType,
+                      messageId: messageId,
+                      isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString()
+                    }
+                  },
+                  apns: {
+                    headers: {
+                      'apns-priority': '10',
+                      'apns-push-type': 'alert'
+                    },
+                    payload: {
+                      aps: {
+                        alert: {
+                          title: subject || 'Notificación',
+                          body: message || 'Mensaje'
+                        },
+                        sound: 'default',
+                        badge: 1,
+                        contentAvailable: true
+                      }
+                    }
+                  },
+                  data: {
+                    messageType: messageType,
+                    messageId: messageId,
+                    isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
+                    timestamp: Date.now().toString()
+                  }
+                };
+
+                const pushResponse = await admin.messaging().send(pushMessage);
+                pushResults.push({ documento: user.documento, success: true, type: 'push', messageId: pushResponse });
+              } catch (pushError) {
+                pushResults.push({ documento: user.documento, success: false, type: 'push', error: pushError.message });
+              }
+            } else {
+              pushResults.push({ documento: user.documento, success: false, type: 'push', error: 'Token no disponible' });
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+
+        const allResults = [...emailResults, ...pushResults];
+        const successCount = allResults.filter(r => r.success).length;
+        const failCount = allResults.filter(r => !r.success).length;
+
+        // Guardar en el historial
+        try {
+          const recipientList = filteredUsers.map(u => u.email || u.documento);
+          await historialNotificacionesModels.create({
+            hnot_remitente: task.prog_remitente || 'Programador Automático',
+            hnot_organizacion_id: organizationId,
+            hnot_titulo: task.prog_titulo,
+            hnot_mensaje: task.prog_mensaje,
+            hnot_tipo_mensaje: task.prog_tipo_mensaje,
+            hnot_destinatarios: JSON.stringify(recipientList),
+            hnot_destinatarios_conteo: filteredUsers.length,
+            hnot_exitosas: successCount,
+            hnot_fallidas: failCount,
+            hnot_fecha_envio: ahoraUTC
+          });
+          console.log(`✅ [CRON NOTIFICACIONES] Historial de ejecución guardado para tarea ${task.prog_id}.`);
+        } catch (dbError) {
+          console.error('❌ Error al guardar historial en CRON:', dbError);
+        }
+
+        // Actualizar estado final del agendamiento
+        await notificacionesProgramadasModels.update(
+          { 
+            prog_estado: task.prog_es_recurrente ? 'PENDIENTE' : 'ENVIADO', 
+            prog_ultima_ejecucion: ahoraUTC 
+          },
+          { where: { prog_id: task.prog_id } }
+        );
+
+      } catch (taskError) {
+        console.error(`❌ Error ejecutando tarea programada ${task.prog_id}:`, taskError);
+        await notificacionesProgramadasModels.update(
+          { prog_estado: 'PENDIENTE' },
+          { where: { prog_id: task.prog_id } }
+        );
+      }
+    }
+  } catch (err) {
+    console.error('❌ Error en cron runner de notificaciones programadas:', err);
+  }
+};
+
+const startScheduledNotifications = () => {
+  cron.schedule('* * * * *', verificarNotificacionesProgramadas);
+};
+
 module.exports = { 
   startSessionCleanup, 
   startAgendamientosCleanup, 
@@ -512,5 +841,7 @@ module.exports = {
   limpiarParqueoNocturno,
   verificarVencimientosParqueo,
   startPrestamosVencidosNotification,
-  verificarPrestamosVencidos
+  verificarPrestamosVencidos,
+  startScheduledNotifications,
+  verificarNotificacionesProgramadas
 };

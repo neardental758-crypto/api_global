@@ -60,6 +60,7 @@ const AgendamientoIncumplido = require('./mysql/agendamientos_incumplidos');
 const RegistroPP = require('./mysql/registrospp');
 const ReporteContradiccion = require('./mysql/reportesContradicciones');
 const HistorialNotificaciones = require('./mysql/historialNotificaciones');
+const NotificacionesProgramadas = require('./mysql/notificacionesProgramadas');
 
 const Candado = require('./mysql/candados');
 const Rol = require('./mysql/roles');
@@ -158,6 +159,7 @@ if (MOTORDB === 'mysql') {
         tarjetasNfcModels: require('./mysql/tarjetasNfc'),
         reportesContradiccionesModels: require('./mysql/reportesContradicciones'),
         historialNotificacionesModels: require('./mysql/historialNotificaciones'),
+        notificacionesProgramadasModels: require('./mysql/notificacionesProgramadas'),
     };
 
     Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
