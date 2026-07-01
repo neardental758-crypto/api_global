@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/session');
 const { validatorId, validatorDocumentToken, validatorEmailToken } = require('../validators/compartidoValidators');
-const { getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage } = require('../controllers/tokenMsn');
+const { getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory } = require('../controllers/tokenMsn');
 
 router.get("/", authMiddleware(["all"]), getItems);
 
@@ -20,5 +20,6 @@ router.delete("/:_id", authMiddleware(["all"]), validatorId, deleteItem);
 
 router.get("/notification-users/:organizationId", authMiddleware(["all"]), getNotificationUsersByOrganization);
 router.post("/send-notification-message", authMiddleware(["all"]), sendNotificationMessage);
+router.get("/historial/:organizationId", authMiddleware(["all"]), getNotificationHistory);
 
 module.exports = router;

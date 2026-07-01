@@ -5,6 +5,7 @@ const Empresa = require('../models/mysql/empresa');
 const Usuario = require('../models/mysql/usuario');
 const TokenMsn = require('../models/mysql/tokenMsn');
 const Prestamos = require('../models/mysql/prestamos');
+const HistorialNotificaciones = require('../models/mysql/historialNotificaciones');
 
 const admin = require('../config/firebase');
 const { Op } = require('sequelize');
@@ -428,6 +429,26 @@ const sendNotificationMessage = async (req, res) => {
     const allResults = [...emailResults, ...pushResults];
     const successCount = allResults.filter(r => r.success).length;
     const failCount = allResults.filter(r => !r.success).length;
+
+    // Guardar en el historial de la base de datos
+    try {
+      const recipientList = targetUsers.map(u => u.email || u.documento);
+      await HistorialNotificaciones.create({
+        hnot_remitente: req.body.remitente || 'Sistema',
+        hnot_organizacion_id: organizationId,
+        hnot_titulo: subject || 'Notificación',
+        hnot_mensaje: message || '',
+        hnot_tipo_mensaje: messageType,
+        hnot_destinatarios: JSON.stringify(recipientList),
+        hnot_destinatarios_conteo: targetUsers.length,
+        hnot_exitosas: successCount,
+        hnot_fallidas: failCount,
+        hnot_fecha_envio: new Date()
+      });
+      console.log('✅ Historial de notificación guardado en DB.');
+    } catch (dbError) {
+      console.error('❌ Error al guardar el historial en DB:', dbError);
+    }
     
     res.json({ 
       success: true, 
@@ -449,6 +470,53 @@ const sendNotificationMessage = async (req, res) => {
   }
 };
 
+const getNotificationHistory = async (req, res) => {
+  try {
+    const { organizationId } = req.params;
+    const { startDate, endDate, search, messageType } = req.query;
+
+    const whereClause = {
+      hnot_organizacion_id: organizationId
+    };
+
+    // Filtro de rango de fechas
+    if (startDate || endDate) {
+      whereClause.hnot_fecha_envio = {};
+      if (startDate) {
+        whereClause.hnot_fecha_envio[Op.gte] = new Date(startDate + 'T00:00:00');
+      }
+      if (endDate) {
+        whereClause.hnot_fecha_envio[Op.lte] = new Date(endDate + 'T23:59:59');
+      }
+    }
+
+    // Filtro por tipo de mensaje
+    if (messageType && messageType !== 'all') {
+      whereClause.hnot_tipo_mensaje = messageType;
+    }
+
+    // Búsqueda general en título, mensaje o remitente
+    if (search && search.trim() !== '') {
+      const searchPattern = `%${search.trim()}%`;
+      whereClause[Op.or] = [
+        { hnot_titulo: { [Op.like]: searchPattern } },
+        { hnot_mensaje: { [Op.like]: searchPattern } },
+        { hnot_remitente: { [Op.like]: searchPattern } }
+      ];
+    }
+
+    const data = await HistorialNotificaciones.findAll({
+      where: whereClause,
+      order: [['hnot_fecha_envio', 'DESC']]
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Error fetching notification history:', error);
+    httpError(res, "ERROR_GET_NOTIFICATION_HISTORY");
+  }
+};
+
 module.exports = {
-    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage
+    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory
 }
