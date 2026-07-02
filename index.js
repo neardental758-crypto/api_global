@@ -16,7 +16,8 @@ const {
   startParqueoNocturnoCleanup, 
   startParqueoVencimientoCleanup, 
   startPrestamosVencidosNotification,
-  startScheduledNotifications
+  startScheduledNotifications,
+  startMantenimientoPersonalizadoCron
 } = require('./utils/cronJobs');
 const path = require('path');
 
@@ -35,6 +36,7 @@ startParqueoNocturnoCleanup();
 startParqueoVencimientoCleanup();
 startPrestamosVencidosNotification();
 startScheduledNotifications();
+startMantenimientoPersonalizadoCron();
 
 //RUTAS
 app.use("/api", require("./routes/"));

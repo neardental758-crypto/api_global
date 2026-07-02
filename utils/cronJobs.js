@@ -20,6 +20,9 @@ const { Op } = require('sequelize');
 const { sequelize } = require('../config/mysql');
 const nodemailer = require('nodemailer');
 const admin = require('../config/firebase');
+const moment = require('moment');
+const { programarMantenimientosSemanalesSura } = require('../services/mantenimientoPersonalizado');
+
 
 const startSessionCleanup = () => {
   cron.schedule('0 */6 * * *', async () => {
@@ -358,7 +361,7 @@ const startParqueoVencimientoCleanup = () => {
 const verificarPrestamosVencidos = async () => {
   try {
     console.log('🔄 [CRON] Iniciando control de préstamos vencidos...');
-    const ahora = new Date();
+    const ahora = new Date(new Date().getTime() - (5 * 60 * 60 * 1000));
 
     // Query active loans that are expired and have not been notified
     const prestamosVencidos = await prestamosModels.findAll({
@@ -418,8 +421,19 @@ const verificarPrestamosVencidos = async () => {
         const emailUsuario = userToken.email;
         const pushToken = userToken.token;
 
+        const fechaInicio = prestamo.pre_retiro_fecha ? moment.utc(prestamo.pre_retiro_fecha).format('DD/MM/YYYY') : '';
+        const horaInicio = prestamo.pre_retiro_hora || '';
+        const fechaFin = prestamo.pre_devolucion_fecha ? moment.utc(prestamo.pre_devolucion_fecha).format('DD/MM/YYYY') : '';
+        const horaFin = prestamo.pre_devolucion_hora || '';
+
         const subject = "¡Recordatorio de entrega de vehículo! 🚲";
-        const message = `Hola ${nombreUsuario}, te recordamos de manera amigable que el tiempo de tu préstamo de bicicleta ha terminado y debes entregar el vehículo. ¡Muchas gracias por tu colaboración!`;
+        const message = `Hola ${nombreUsuario}, te recordamos de manera amigable que el tiempo de tu préstamo de bicicleta ha terminado y debes entregar el vehículo.
+
+Detalles del préstamo:
+- Inicio: ${fechaInicio} a las ${horaInicio}
+- Vencimiento: ${fechaFin} a las ${horaFin}
+
+Si deseas extender el préstamo, puedes hacerlo desde el chatbot de la aplicación ingresando a la opción "Extensión Prestamos". ¡Muchas gracias por tu colaboración!`;
 
         let notificacionEnviada = false;
 
@@ -472,7 +486,7 @@ const verificarPrestamosVencidos = async () => {
               from: 'Servicio@bicyclecapital.co',
               to: emailUsuario,
               subject: subject,
-              html: `<p>${message}</p>`
+              html: `<p>${message.replace(/\n/g, '<br>')}</p>`
             };
 
             await transporter.sendMail(emailOptions);
@@ -501,7 +515,7 @@ const verificarPrestamosVencidos = async () => {
 };
 
 const startPrestamosVencidosNotification = () => {
-  cron.schedule('0 17 * * *', verificarPrestamosVencidos);
+  cron.schedule('0 22 * * *', verificarPrestamosVencidos);
 };
 
 const verificarNotificacionesProgramadas = async () => {
@@ -857,6 +871,14 @@ const startScheduledNotifications = () => {
   cron.schedule('*/30 * * * *', verificarNotificacionesProgramadas);
 };
 
+const startMantenimientoPersonalizadoCron = () => {
+  // Ejecutar todos los domingos a las 01:00 AM
+  cron.schedule('0 1 * * 0', async () => {
+    console.log('🔄 [CRON MANTENIMIENTO PERSONALIZADO] Ejecutando programador automático...');
+    await programarMantenimientosSemanalesSura();
+  });
+};
+
 module.exports = { 
   startSessionCleanup, 
   startAgendamientosCleanup, 
@@ -869,5 +891,6 @@ module.exports = {
   startPrestamosVencidosNotification,
   verificarPrestamosVencidos,
   startScheduledNotifications,
-  verificarNotificacionesProgramadas
+  verificarNotificacionesProgramadas,
+  startMantenimientoPersonalizadoCron
 };
