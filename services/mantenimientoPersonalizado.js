@@ -109,9 +109,22 @@ async function programarMantenimientosSemanalesSura() {
     // 5. Ordenar por la fecha del último mantenimiento de forma ascendente (más antiguas primero)
     candidatasConFecha.sort((a, b) => a.fecha_ultimo_mantenimiento - b.fecha_ultimo_mantenimiento);
     
-    // Tomar las primeras 10
-    const elegidas = candidatasConFecha.slice(0, 10);
-    console.log(`📝 [MANTENIMIENTO PERSONALIZADO] Se seleccionaron ${elegidas.length} vehículos para programar.`);
+    // Límite estricto de negocio: Máximo 10 mantenimientos preventivos activos de forma simultánea.
+    // Calculamos el cupo disponible restando los que ya están activos (pendiente/en_proceso)
+    const cupoDisponible = 10 - mantenimientosActivos.length;
+    
+    if (cupoDisponible <= 0) {
+      console.log('ℹ️ [MANTENIMIENTO PERSONALIZADO] El cupo de 10 mantenimientos activos simultáneos ya está completo.');
+      return { 
+        success: true, 
+        message: `El cupo semanal de 10 mantenimientos activos ya está completo (${mantenimientosActivos.length} activos). No se agendaron nuevos vehículos.`, 
+        programados: 0 
+      };
+    }
+    
+    // Tomar solo las necesarias para completar los 10 cupos
+    const elegidas = candidatasConFecha.slice(0, cupoDisponible);
+    console.log(`📝 [MANTENIMIENTO PERSONALIZADO] Cupo disponible: ${cupoDisponible}. Se seleccionaron ${elegidas.length} vehículos para programar.`);
     
     const transporter = nodemailer.createTransport({
       service: 'gmail',
