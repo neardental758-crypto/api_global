@@ -7,6 +7,7 @@ const {
   getHistorial,
   enviarRecordatorioManual,
   forzarMantenimiento,
+  cancelarYReemplazarMantenimiento,
   ejecutarCronManual
 } = require('../controllers/mantenimientoPersonalizado');
 
@@ -24,6 +25,9 @@ router.post("/recordatorio", authMiddleware(["all"]), enviarRecordatorioManual);
 
 // Adelantar/forzar la programación de mantenimiento de una bicicleta
 router.post("/forzar-turno", authMiddleware(["all"]), forzarMantenimiento);
+
+// Cancelar mantenimiento y elegir reemplazo
+router.post("/cancelar-y-reemplazar", authMiddleware(["all"]), cancelarYReemplazarMantenimiento);
 
 // Gatillar manualmente el cron job de selección rotativa semanal
 router.post("/ejecutar-cron", authMiddleware(["all"]), ejecutarCronManual);

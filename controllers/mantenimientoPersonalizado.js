@@ -548,6 +548,224 @@ const forzarMantenimiento = async (req, res) => {
 };
 
 /**
+ * Cancela un agendamiento pendiente y programa automáticamente el siguiente vehículo de reemplazo
+ */
+const cancelarYReemplazarMantenimiento = async (req, res) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { mantenimiento_id, usuario_documento } = req.body;
+
+    if (!mantenimiento_id && !usuario_documento) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'mantenimiento_id o usuario_documento es requerido' });
+    }
+
+    // 1. Buscar el mantenimiento preventivo a cancelar
+    let mantenimiento = null;
+    if (mantenimiento_id) {
+      mantenimiento = await mantenimientoModels.findByPk(mantenimiento_id);
+    } else if (usuario_documento) {
+      // Obtener el préstamo personalizado activo del usuario
+      const prestamo = await prestamosModels.findOne({
+        where: {
+          pre_usuario: usuario_documento,
+          pre_devolucion_estacion: { [Op.like]: '%Davivienda Torre Sura%' },
+          pre_estado: { [Op.like]: '%PRESTAMO PERSONALIZADO%' }
+        }
+      });
+
+      if (!prestamo) {
+        await transaction.rollback();
+        return res.status(404).json({ success: false, error: 'No se encontró un préstamo personalizado activo para el usuario con el documento ingresado.' });
+      }
+
+      // Buscar mantenimiento activo
+      mantenimiento = await mantenimientoModels.findOne({
+        where: {
+          bicicleta_id: prestamo.pre_bicicleta,
+          tipo_mantenimiento: 'preventivo',
+          estado: { [Op.in]: ['pendiente', 'en_proceso'] }
+        }
+      });
+    }
+
+    if (!mantenimiento) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, error: 'No se encontró un agendamiento de mantenimiento preventivo activo para este usuario/vehículo.' });
+    }
+
+    if (mantenimiento.estado !== 'pendiente' && mantenimiento.estado !== 'en_proceso') {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, error: 'Solo se pueden cancelar mantenimientos pendientes o en proceso' });
+    }
+
+    // Actualizar estado a cancelado
+    await mantenimiento.update({
+      estado: 'cancelado',
+      comentarios: (mantenimiento.comentarios || '') + ' - Cancelado a solicitud del usuario y reemplazado automáticamente por el sistema.'
+    }, { transaction });
+
+    // 2. Buscar la siguiente bicicleta disponible para el reemplazo
+    const estacion = await estacionModels.findByPk(mantenimiento.estacion_id);
+    const est_estacion = estacion ? estacion.est_estacion : 'Davivienda Torre Sura';
+
+    // Obtener todos los préstamos personalizados activos en esta estación
+    const prestamos = await prestamosModels.findAll({
+      where: {
+        pre_devolucion_estacion: { [Op.like]: `%${est_estacion}%` },
+        pre_estado: { [Op.like]: '%PRESTAMO PERSONALIZADO%' }
+      }
+    });
+
+    if (prestamos.length === 0) {
+      await transaction.commit();
+      return res.json({
+        success: true,
+        message: 'Mantenimiento cancelado. No se encontraron vehículos en préstamo personalizado para reemplazo.',
+        reemplazo: null
+      });
+    }
+
+    const bicisAsignadas = prestamos.map(p => ({
+      bicicleta_id: p.pre_bicicleta,
+      usuario_documento: p.pre_usuario,
+      prestamo_id: p.pre_id
+    })).filter(item => item.bicicleta_id && item.usuario_documento);
+
+    const bicisIds = bicisAsignadas.map(b => b.bicicleta_id);
+
+    // Mantenimientos activos actuales (excluyendo el que acabamos de cancelar)
+    const mantenimientosActivos = await mantenimientoModels.findAll({
+      where: {
+        bicicleta_id: { [Op.in]: bicisIds },
+        tipo_mantenimiento: 'preventivo',
+        estado: { [Op.in]: ['pendiente', 'en_proceso'] },
+        id: { [Op.ne]: mantenimiento_id }
+      },
+      transaction
+    });
+
+    const bicisIdsExcluir = new Set(mantenimientosActivos.map(m => m.bicicleta_id));
+    // También excluimos la bicicleta cancelada de forma temporal para que no sea su propio reemplazo
+    bicisIdsExcluir.add(mantenimiento.bicicleta_id);
+
+    const bicisCandidatas = bicisAsignadas.filter(b => !bicisIdsExcluir.has(b.bicicleta_id));
+
+    let reemplazo = null;
+    let nuevoMantenimiento = null;
+
+    if (bicisCandidatas.length > 0) {
+      // Buscar fechas de último mantenimiento preventivo finalizado
+      const candidatasConFecha = [];
+      for (const cand of bicisCandidatas) {
+        const ultimoMant = await mantenimientoModels.findOne({
+          where: {
+            bicicleta_id: cand.bicicleta_id,
+            tipo_mantenimiento: 'preventivo',
+            estado: 'finalizado'
+          },
+          order: [['fecha_finalizacion', 'DESC']],
+          transaction
+        });
+
+        candidatasConFecha.push({
+          ...cand,
+          fecha_ultimo_mantenimiento: ultimoMant ? new Date(ultimoMant.fecha_finalizacion) : new Date(0)
+        });
+      }
+
+      // Ordenar y tomar la primera
+      candidatasConFecha.sort((a, b) => a.fecha_ultimo_mantenimiento - b.fecha_ultimo_mantenimiento);
+      reemplazo = candidatasConFecha[0];
+
+      // Crear el mantenimiento preventivo pendiente para el reemplazo
+      nuevoMantenimiento = await mantenimientoModels.create({
+        empresa_id: mantenimiento.empresa_id,
+        bicicleta_id: reemplazo.bicicleta_id,
+        operario_id: mantenimiento.operario_id,
+        estacion_id: mantenimiento.estacion_id,
+        tipo_mantenimiento: 'preventivo',
+        estado: 'pendiente',
+        prioridad: 'media',
+        comentarios: 'Mantenimiento preventivo agendado automáticamente como reemplazo de turno.',
+        fecha_creacion: new Date()
+      }, { transaction });
+    }
+
+    await transaction.commit();
+
+    // Enviar notificación al nuevo usuario asignado
+    if (reemplazo && nuevoMantenimiento) {
+      try {
+        const usuario = await usuarioModels.findOne({ where: { usu_documento: reemplazo.usuario_documento } });
+        const tokenMsn = await tokenMsnModels.findOne({ where: { documento: reemplazo.usuario_documento } });
+        const nombreUsuario = usuario ? usuario.usu_nombre : 'Usuario';
+        const emailUsuario = tokenMsn ? tokenMsn.email : (usuario ? usuario.usu_email : null);
+        const pushToken = tokenMsn ? tokenMsn.token : null;
+
+        const subject = "¡Turno de mantenimiento programado! 🚲";
+        const message = `Hola ${nombreUsuario}, te informamos de manera amigable que tu vehículo asignado tiene programado su mantenimiento preventivo semanal. Por favor, acércate a la estación Davivienda Torre Sura durante la próxima semana para realizar el mantenimiento preventivo correspondiente. ¡Muchas gracias!`;
+
+        let notificadoPush = false;
+        let notificadoEmail = false;
+
+        // Push
+        if (pushToken && pushToken.trim() !== '' && pushToken.length > 140) {
+          try {
+            await admin.messaging().send({
+              token: pushToken,
+              notification: { title: subject, body: message },
+              android: { priority: 'high', notification: { sound: 'default', channelId: 'high_importance_channel' } }
+            });
+            notificadoPush = true;
+          } catch (e) {
+            console.error('Error enviando push en reemplazo:', e.message);
+          }
+        }
+
+        // Email
+        if (emailUsuario && emailUsuario.trim() !== '') {
+          try {
+            const transporter = nodemailer.createTransport({
+              service: 'gmail',
+              auth: { user: 'Servicio@bicyclecapital.co', pass: 'fyam ecci wqby fhaj' }
+            });
+            await transporter.sendMail({
+              from: 'Servicio@bicyclecapital.co',
+              to: emailUsuario,
+              subject: subject,
+              html: `<p>${message}</p>`
+            });
+            notificadoEmail = true;
+          } catch (e) {
+            console.error('Error enviando correo en reemplazo:', e.message);
+          }
+        }
+      } catch (notifyErr) {
+        console.error('Error en notificaciones de reemplazo:', notifyErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: reemplazo 
+        ? 'Mantenimiento cancelado y reemplazado con éxito.' 
+        : 'Mantenimiento cancelado, pero no se encontraron vehículos adicionales para el reemplazo.',
+      reemplazo: reemplazo ? {
+        bicicleta_id: reemplazo.bicicleta_id,
+        usuario_documento: reemplazo.usuario_documento,
+        mantenimiento_id: nuevoMantenimiento.id
+      } : null
+    });
+
+  } catch (error) {
+    if (transaction) await transaction.rollback();
+    console.error('Error en cancelarYReemplazarMantenimiento:', error);
+    httpError(res, 'ERROR_CANCELAR_Y_REEMPLAZAR_MANTENIMIENTO');
+  }
+};
+
+/**
  * Ejecutar de manera manual el cron job de selección rotativa semanal
  */
 const ejecutarCronManual = async (req, res) => {
@@ -566,5 +784,6 @@ module.exports = {
   getHistorial,
   enviarRecordatorioManual,
   forzarMantenimiento,
+  cancelarYReemplazarMantenimiento,
   ejecutarCronManual
 };
