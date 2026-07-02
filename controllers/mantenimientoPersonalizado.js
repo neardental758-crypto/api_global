@@ -704,7 +704,7 @@ const cancelarYReemplazarMantenimiento = async (req, res) => {
         const pushToken = tokenMsn ? tokenMsn.token : null;
 
         const subject = "¡Turno de mantenimiento programado! 🚲";
-        const message = `Hola ${nombreUsuario}, te informamos de manera amigable que tu vehículo asignado tiene programado su mantenimiento preventivo semanal. Por favor, acércate a la estación Davivienda Torre Sura durante la próxima semana para realizar el mantenimiento preventivo correspondiente. ¡Muchas gracias!`;
+        const message = `Hola ${nombreUsuario}, te informamos de manera amigable que tu vehículo asignado tiene programado su mantenimiento preventivo para la próxima semana. Por favor, acércate a la estación Davivienda Torre Sura para realizar el respectivo mantenimiento preventivo. Si tienes algún inconveniente o no puedes asistir, comunícate con soporte de inmediato para reagendar tu turno. ¡Muchas gracias!`;
 
         let notificadoPush = false;
         let notificadoEmail = false;

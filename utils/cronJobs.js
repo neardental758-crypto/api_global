@@ -872,8 +872,8 @@ const startScheduledNotifications = () => {
 };
 
 const startMantenimientoPersonalizadoCron = () => {
-  // Ejecutar todos los domingos a las 01:00 AM
-  cron.schedule('0 1 * * 0', async () => {
+  // Ejecutar todos los jueves a las 05:00 PM (17:00)
+  cron.schedule('0 17 * * 4', async () => {
     console.log('🔄 [CRON MANTENIMIENTO PERSONALIZADO] Ejecutando programador automático...');
     await programarMantenimientosSemanalesSura();
   });
