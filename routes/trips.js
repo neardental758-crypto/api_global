@@ -146,7 +146,7 @@ const applyWhereFilter = (trip, cond) => {
             tripVal = trip.startDate;
         } else if (key === 'endDate') {
             tripVal = trip.endDate;
-        } else if (key === 'user.idNumber' || key === 'idNumber') {
+        } else if (key === 'user.idNumber' || key === 'idNumber' || key === 'userId') {
             tripVal = trip.user.idNumber;
         } else if (key === 'user.email' || key === 'email') {
             tripVal = trip.user.email;
