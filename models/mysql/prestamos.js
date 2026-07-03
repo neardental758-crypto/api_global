@@ -54,6 +54,52 @@ const Prestamos = sequelize.define(
             type: DataTypes.STRING,
             allowNull: true
         }
+    },
+    {
+        timestamps: false,
+        hooks: {
+            afterUpdate: async (instance, options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        io.emit('loan_update', instance.toJSON());
+                    }
+                } catch (err) {
+                    console.error('Error emitting loan_update in afterUpdate hook:', err.message);
+                }
+            },
+            afterSave: async (instance, options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        io.emit('loan_update', instance.toJSON());
+                    }
+                } catch (err) {
+                    console.error('Error emitting loan_update in afterSave hook:', err.message);
+                }
+            },
+            afterBulkUpdate: async (options) => {
+                try {
+                    const { getIo } = require('../../services/socketIoService');
+                    const io = getIo();
+                    if (io) {
+                        const PrestamosModel = sequelize.models.bc_prestamos;
+                        if (PrestamosModel && options.where) {
+                            const updatedLoans = await PrestamosModel.findAll({
+                                where: options.where
+                            });
+                            for (const loan of updatedLoans) {
+                                io.emit('loan_update', loan.toJSON());
+                            }
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error emitting loan_update in afterBulkUpdate hook:', err.message);
+                }
+            }
+        }
     }
 );
 
