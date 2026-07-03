@@ -23,6 +23,7 @@ function parseBikesFilter(req) {
 
     let numberSearchTerm = "";
     let organizationId = null;
+    let stationId = null;
 
     function traverse(obj) {
         if (!obj || typeof obj !== 'object') return;
@@ -40,6 +41,12 @@ function parseBikesFilter(req) {
                 if (typeof val === 'string') {
                     organizationId = val;
                 }
+            } else if (key === 'stationId' || key === 'station') {
+                if (val && typeof val === 'object') {
+                    stationId = val.eq || val.like || Object.values(val)[0];
+                } else {
+                    stationId = val;
+                }
             }
             traverse(val);
         }
@@ -47,7 +54,7 @@ function parseBikesFilter(req) {
 
     traverse(whereClause);
 
-    return { numberSearchTerm, organizationId, filterObj };
+    return { numberSearchTerm, organizationId, stationId, filterObj };
 }
 
 function mapEstadoToFrontend(estado) {
@@ -110,7 +117,7 @@ function mapBicicletaToFrontend(bike) {
 // GET /api/bikes
 router.get("/", authMiddleware(['all']), async (req, res) => {
     try {
-        const { numberSearchTerm, organizationId, filterObj } = parseBikesFilter(req);
+        const { numberSearchTerm, organizationId, stationId, filterObj } = parseBikesFilter(req);
 
         const where = {};
 
@@ -130,6 +137,11 @@ router.get("/", authMiddleware(['all']), async (req, res) => {
                 // If company doesn't exist, return empty array immediately
                 return res.send([]);
             }
+        }
+
+        // 3. Filter by station
+        if (stationId) {
+            where.bic_estacion = stationId;
         }
 
         const limit = filterObj.limit ? parseInt(filterObj.limit) : 100;
