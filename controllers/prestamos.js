@@ -865,6 +865,11 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
   AND pre_modulo = '5g'
 `);
 
+    const company = await empresaModels.findOne({
+      where: { emp_id: organizationId }
+    });
+    const organizationName = company ? company.emp_nombre : null;
+
     const queryOptions = {
       attributes: [
         "pre_id",
@@ -889,13 +894,19 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
           model: Usuario,
           attributes: ["usu_documento", "usu_nombre", "usu_empresa", "usu_genero"],
           required: true,
-          where: { usu_prueba: 0 },
+          where: {
+            usu_prueba: 0,
+            usu_empresa: {
+              [Op.in]: organizationName
+                ? [organizationId, organizationName]
+                : [organizationId],
+            },
+          },
           include: [
             {
               model: Empresa,
               attributes: ["emp_id", "emp_nombre"],
-              required: true,
-              where: stationName ? {} : { emp_id: organizationId },
+              required: false,
             },
           ],
         },

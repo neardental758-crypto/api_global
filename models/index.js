@@ -177,8 +177,8 @@ if (MOTORDB === 'mysql') {
     Reserva.belongsTo(Bicicleta, { foreignKey: "res_bicicleta" });
     Bicicleta.hasOne(Reserva, { foreignKey: "res_bicicleta" });
 
-    Usuario.belongsTo(Empresa, { foreignKey: "usu_empresa" });
-    Empresa.hasOne(Usuario, { foreignKey: "usu_empresa" });
+    Usuario.belongsTo(Empresa, { foreignKey: "usu_empresa", targetKey: "emp_nombre" });
+    Empresa.hasOne(Usuario, { foreignKey: "usu_empresa", sourceKey: "emp_nombre" });
 
     Usuario.belongsTo(Extendido, { foreignKey: "usu_documento", as: 'extendido' });
     Extendido.hasOne(Usuario, { foreignKey: "usu_documento", as: 'extendido' });
