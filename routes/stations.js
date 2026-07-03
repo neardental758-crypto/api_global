@@ -4,6 +4,32 @@ const authMiddleware = require('../middleware/session');
 const Estacion = require('../models/mysql/estacion');
 const Empresa = require('../models/mysql/empresa');
 
+function hhmmToMinutes(hhmm) {
+    if (!hhmm) return 0;
+    const parts = hhmm.trim().split(':');
+    if (parts.length >= 2) {
+        const hours = parseInt(parts[0], 10) || 0;
+        const minutes = parseInt(parts[1], 10) || 0;
+        return hours * 60 + minutes;
+    }
+    return 0;
+}
+
+function minutesToHHMM(time) {
+    if (time === undefined || time === null) return "00:00";
+    if (typeof time === 'number' || !isNaN(Number(time))) {
+        const mins = parseInt(time, 10);
+        const hours = Math.floor(mins / 60);
+        const minsRemainder = mins % 60;
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(hours)}:${pad(minsRemainder)}`;
+    }
+    if (typeof time === 'string') {
+        return time.trim();
+    }
+    return "00:00";
+}
+
 router.get('/', authMiddleware(["all"]), async (req, res) => {
     try {
         let filter = {};
@@ -79,15 +105,15 @@ router.get('/', authMiddleware(["all"]), async (req, res) => {
         
         // Map to format expected by frontend
         const mappedStations = stations.map(station => {
-            let openingTime = "06:00";
-            let closingTime = "22:00";
+            let openingTime = 360; // 06:00
+            let closingTime = 1320; // 22:00
             if (station.est_horario) {
                 const parts = station.est_horario.split(/ a | to |-/i);
                 if (parts.length >= 2) {
-                    openingTime = parts[0].trim();
-                    closingTime = parts[1].trim();
+                    openingTime = hhmmToMinutes(parts[0]);
+                    closingTime = hhmmToMinutes(parts[1]);
                 } else {
-                    openingTime = station.est_horario.trim();
+                    openingTime = hhmmToMinutes(station.est_horario);
                 }
             }
 
@@ -118,8 +144,8 @@ router.get('/', authMiddleware(["all"]), async (req, res) => {
 router.post('/', authMiddleware(["all"]), async (req, res) => {
     try {
         const body = req.body;
-        const opening = body.openingTime || "06:00";
-        const closing = body.closingTime || "22:00";
+        const opening = minutesToHHMM(body.openingTime !== undefined ? body.openingTime : 360);
+        const closing = minutesToHHMM(body.closingTime !== undefined ? body.closingTime : 1320);
         
         const organization = await Empresa.findByPk(body.organizationId);
         const organizationName = organization && organization.emp_nombre ? organization.emp_nombre : body.organizationId;
@@ -167,8 +193,19 @@ router.patch('/:id', authMiddleware(["all"]), async (req, res) => {
         if (body.latitude !== undefined) updateData.est_latitud = parseFloat(body.latitude);
         if (body.longitude !== undefined) updateData.est_longitud = parseFloat(body.longitude);
         if (body.openingTime !== undefined || body.closingTime !== undefined) {
-            const opening = body.openingTime !== undefined ? body.openingTime : (station.est_horario ? station.est_horario.split(/ a | to |-/i)[0] : "06:00");
-            const closing = body.closingTime !== undefined ? body.closingTime : (station.est_horario && station.est_horario.split(/ a | to |-/i)[1] ? station.est_horario.split(/ a | to |-/i)[1] : "22:00");
+            let openingVal = 360;
+            let closingVal = 1320;
+            if (station.est_horario) {
+                const parts = station.est_horario.split(/ a | to |-/i);
+                if (parts.length >= 2) {
+                    openingVal = hhmmToMinutes(parts[0]);
+                    closingVal = hhmmToMinutes(parts[1]);
+                } else {
+                    openingVal = hhmmToMinutes(station.est_horario);
+                }
+            }
+            const opening = minutesToHHMM(body.openingTime !== undefined ? body.openingTime : openingVal);
+            const closing = minutesToHHMM(body.closingTime !== undefined ? body.closingTime : closingVal);
             updateData.est_horario = `${opening} a ${closing}`;
         }
 
