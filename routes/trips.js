@@ -152,6 +152,8 @@ const applyWhereFilter = (trip, cond) => {
             tripVal = trip.user.email;
         } else if (key === 'bike.number' || key === 'number') {
             tripVal = trip.bike.number;
+        } else if (key === 'bikeId' || key === 'bike.id') {
+            tripVal = trip.bike.id;
         } else if (key === 'startStation.name') {
             tripVal = trip.startStation.name;
         } else if (key === 'startStationId') {
@@ -171,7 +173,12 @@ const applyWhereFilter = (trip, cond) => {
             } else if (op === 'lte') {
                 if (new Date(tripVal) > new Date(opVal)) return false;
             } else if (op === 'inq') {
-                if (!opVal.includes(tripVal)) return false;
+                if (Array.isArray(opVal)) {
+                    const stringifiedOpVal = opVal.map(v => String(v));
+                    if (!stringifiedOpVal.includes(String(tripVal))) return false;
+                } else {
+                    if (!opVal.includes(tripVal)) return false;
+                }
             }
         } else {
             if (String(tripVal) !== String(val)) return false;
