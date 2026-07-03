@@ -1,5 +1,5 @@
 const { matchedData } = require('express-validator');
-const { prestamosModels } = require('../models');
+const { prestamosModels, indicadoresModels } = require('../models');
 const Usuario = require('../models/mysql/usuario');
 const Estacion = require('../models/mysql/estacion');
 const Empresa = require('../models/mysql/empresa');
@@ -873,8 +873,16 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
       include: [
         {
           model: Bicicleta,
-          attributes: ["bic_id", "bic_numero", "bic_nombre", "bic_estacion"],
+          attributes: ["bic_id", "bic_numero", "bic_nombre", "bic_estacion", "bic_estado"],
           required: false,
+          include: [
+            {
+              model: Candado,
+              as: "lock",
+              required: false,
+              attributes: ["can_id", "can_imei", "can_qr_numero", "can_latitud", "can_longitud", "can_bateria", "can_estado_candado"],
+            },
+          ],
         },
         {
           model: Usuario,
@@ -906,6 +914,12 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
           model: Comentarios,
           attributes: ["com_calificacion", "com_comentario"],
           required: false,
+        },
+        {
+          model: indicadoresModels,
+          as: "indicadores",
+          required: false,
+          attributes: ["ind_distancia", "ind_co2", "ind_calorias"],
         },
       ],
       where: whereCondition,
