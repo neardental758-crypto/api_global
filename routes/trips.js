@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/session');
-const { prestamosModels, usuarioModels, bicicletasModels, estacionModels, comentariosModels, empresaModels } = require('../models');
+const { prestamosModels, usuarioModels, bicicletasModels, estacionModels, comentariosModels, empresaModels, indicadoresModels } = require('../models');
 const { Op } = require('sequelize');
 
 const get5gLoansForOrganization = async (organizationId) => {
@@ -44,6 +44,12 @@ const get5gLoansForOrganization = async (organizationId) => {
                 as: 'comentarios',
                 attributes: ['com_calificacion', 'com_comentario'],
                 required: false
+            },
+            {
+                model: indicadoresModels,
+                as: 'indicadores',
+                required: false,
+                attributes: ['ind_distancia', 'ind_co2', 'ind_calorias']
             }
         ],
         order: [['pre_id', 'DESC']]
@@ -65,6 +71,7 @@ const mapLoanToTrip = (loan) => {
     const userObj = loan.usuario || {};
     const bikeObj = loan.bicicleta || {};
     const commentObj = loan.comentarios || {};
+    const indicatorObj = (loan.indicadores && loan.indicadores[0]) || {};
 
     const startStationName = loan.pre_retiro_estacion || "";
     const endStationName = loan.pre_devolucion_estacion || startStationName || "";
@@ -83,7 +90,9 @@ const mapLoanToTrip = (loan) => {
         startDate: safeISOString(loan.pre_retiro_fecha),
         endDate: safeISOString(loan.pre_devolucion_fecha),
         time: loan.pre_duracion ? Math.round(Number(loan.pre_duracion)) : 0,
-        distanceKm: 0,
+        distanceKm: indicatorObj.ind_distancia ? Number(indicatorObj.ind_distancia) : 0,
+        co2: indicatorObj.ind_co2 ? Number(indicatorObj.ind_co2) : 0,
+        calories: indicatorObj.ind_calorias ? Number(indicatorObj.ind_calorias) : 0,
         user: {
             name: userObj.usu_nombre || "",
             email: userObj.usu_email || userObj.usu_correo || "",
