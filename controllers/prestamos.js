@@ -850,18 +850,6 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
           AND pre_retiro_fecha < '${endDate} 23:59:59'
       )
   )
-  AND (
-      pre_dispositivo IN ('web_pp', 'web_pe')
-      OR 
-      (
-          pre_dispositivo NOT IN ('web_pp', 'web_pe')
-          AND (
-              pre_retiro_fecha IS NULL
-              OR pre_devolucion_fecha IS NULL
-              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 900
-          )
-      )
-  )
   AND pre_modulo = '5g'
 `);
 
