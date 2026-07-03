@@ -865,9 +865,7 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
   AND pre_modulo = '5g'
 `);
 
-    const company = await empresaModels.findOne({
-      where: { emp_id: organizationId }
-    });
+    const company = await Empresa.findByPk(organizationId);
     const organizationName = company ? company.emp_nombre : null;
 
     const queryOptions = {
