@@ -35,6 +35,26 @@ const Bicicleta = sequelize.define(
         },
         bic_clave: {
             type: DataTypes.STRING,
+        },
+        bic_numero_serie: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        bic_modelo_vehiculo: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        bic_numero_bateria: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        bic_numero_cargador: {
+            type: DataTypes.STRING,
+            allowNull: true
+        },
+        bic_fecha_ingreso_operacion: {
+            type: DataTypes.DATE,
+            allowNull: true
         }
     },
     {
