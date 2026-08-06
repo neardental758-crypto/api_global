@@ -1,8 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { validatorCreateEmpresa, validatorGet, validatorGetEmail,validatorGetByName, validatorGetEmpresasWithStations } = require('../validators/empresaValidators');
-const { getItems, createItem, getItem, getItemEmail, patchItem, getItemFilterOrganitationFromStation, getItemEmail_cortezza, getItemFilterOrganitationFromStation_cortezza, getUsuariosCountByOrganization, getUsuariosCount, getItemByName, getEmpresasWithStations, getUsersByStation,updateOrganization} = require('../controllers/empresa');
+const { validatorCreateEmpresa, validatorGet, validatorGetEmail, validatorGetByName, validatorGetEmpresasWithStations } = require('../validators/empresaValidators');
+const { getItems, createItem, getItem, getItemEmail, patchItem, getItemFilterOrganitationFromStation, getItemEmail_cortezza, getItemFilterOrganitationFromStation_cortezza, getUsuariosCountByOrganization, getUsuariosCount, getItemByName, getEmpresasWithStations, getUsersByStation, updateOrganization } = require('../controllers/empresa');
 const authMiddleware = require('../middleware/session');
+// probando cambios en servidor
 
 router.get("/", getItems);
 
@@ -14,9 +15,6 @@ router.get("/email/:emp_email", validatorGetEmail, getItemEmail); //get por emai
 
 router.patch("/:emp_id", validatorGet, patchItem);
 router.patch("/update/:emp_id", validatorGet, updateOrganization);
-
-
-
 
 router.post("/registrarempresa", authMiddleware(['all']), validatorCreateEmpresa, createItem);
 router.get("/nombre/:emp_nombre", validatorGetByName, getItemByName);
@@ -31,7 +29,7 @@ router.get("/usuarios-total-count", authMiddleware(['all']), getUsuariosCount);
 router.get("/estaciones/usuarios/:estacionId", authMiddleware(['all']), getUsersByStation);
 
 //Router cortezza
-router.get("/org_cortezza/:emp_id",authMiddleware(["external"]), validatorGet, getItemFilterOrganitationFromStation_cortezza);
-router.get("/email_cortezza/:emp_email",authMiddleware(["external"]), validatorGetEmail, getItemEmail_cortezza); //get por email corporativo
+router.get("/org_cortezza/:emp_id", authMiddleware(["external"]), validatorGet, getItemFilterOrganitationFromStation_cortezza);
+router.get("/email_cortezza/:emp_email", authMiddleware(["external"]), validatorGetEmail, getItemEmail_cortezza); //get por email corporativo
 
 module.exports = router;
