@@ -25,6 +25,7 @@ const authMiddleware = (requiredPermissions = []) => {
           httpError(res, "NOT JWT", 401);
           return;
         }
+        req.user = dataToken;
         // Extraer los permisos del token
         const { permissions } = dataToken;
         // Verificar si el permiso es "none", bloquea el acceso

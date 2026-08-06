@@ -15,15 +15,21 @@ const sequelize = new Sequelize(
         host,
         port,
         dialect: 'mysql',
+        logging: false, // Desactiva los logs masivos de "Executing (default): SELECT..." en Hostinger
         define: {
             timestamps: false, //la marca de tiempo en false para que no la tome en ningún modelo (createdAt, updatedAt)
             freezeTableName: true, //congela el nombre de la tabla y no le agrega el plural
         },
+        dialectOptions: {
+            connectTimeout: 60000,
+            keepAliveInitialDelay: 10000,
+            enableKeepAlive: true
+        },
         pool: {
-            max: 3,             // Reduce max active connections to prevent resource usage spikes
-            min: 0,             // Do not keep connections open when idle
-            acquire: 30000,     // Timeout in ms to acquire connection
-            idle: 5000          // Close connection if idle for 5 seconds to reduce count
+            max: 5,             // Máximo de conexiones activas
+            min: 1,             // Mantener al menos 1 conexión abierta para no crear nuevas constantemente
+            acquire: 60000,     // Tiempo de espera para adquirir conexión
+            idle: 300000        // Mantener la conexión inactiva 5 minutos antes de cerrarla (evita agotar max_connections_per_hour)
         }
     }
 )

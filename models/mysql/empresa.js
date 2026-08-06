@@ -50,6 +50,9 @@ const Empresa = sequelize.define(
         _vehiculo_particular: {
             type: DataTypes.STRING
         },
+        _introduccion_movilidad: {
+            type: DataTypes.STRING
+        },
         emp_carro_compartido: {
             type: DataTypes.BOOLEAN
         },
