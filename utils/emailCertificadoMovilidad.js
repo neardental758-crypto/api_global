@@ -39,7 +39,7 @@ const enviarCertificadoMovilidad = async ({
         if (appType === 'meb') {
             emailConfig = {
                 user: 'experiencia@mejorenbici.com',
-                pass: 'udtl ydrk pvyf oiev'
+                pass: 'himq ialw wyvh mrdq'
             };
             templateConfig = {
                 primaryColor: '#2E7D32',
@@ -50,8 +50,8 @@ const enviarCertificadoMovilidad = async ({
             };
         } else {
             emailConfig = {
-                user: 'Servicio@bicyclecapital.co',
-                pass: 'fyam ecci wqby fhaj'
+                user: 'contacto@bicyclecapital.co',
+                pass: 'cfgp eoer gfsk xsfm'
             };
             templateConfig = {
                 primaryColor: '#2E7D32',
