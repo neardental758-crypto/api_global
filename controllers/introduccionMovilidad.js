@@ -3,6 +3,21 @@ const { httpError } = require('../utils/handleError');
 const { Op } = require('sequelize');
 const { enviarCertificadoMovilidad } = require('../utils/emailCertificadoMovilidad');
 
+const helperSanitizeOpciones = (opciones) => {
+    let result = opciones;
+    while (typeof result === 'string') {
+        try {
+            result = JSON.parse(result);
+        } catch (e) {
+            break;
+        }
+    }
+    if (!Array.isArray(result)) {
+        return [];
+    }
+    return result.map((o) => String(o).trim());
+};
+
 /**
  * Obtener id de usuario del token o req
  */
@@ -148,18 +163,10 @@ const getModuloDetalle = async (req, res) => {
         });
 
         const preguntasSanitizadas = preguntasDb.map((p) => {
-            let opciones = p.opciones_respuestas;
-            if (typeof opciones === 'string') {
-                try {
-                    opciones = JSON.parse(opciones);
-                } catch (e) {
-                    opciones = [];
-                }
-            }
             return {
                 id: p.id,
                 pregunta: p.pregunta,
-                opciones: opciones
+                opciones: helperSanitizeOpciones(p.opciones_respuestas)
             };
         });
 
@@ -432,11 +439,7 @@ const getAdminPreguntas = async (req, res) => {
         });
 
         const result = preguntas.map((p) => {
-            let opciones = p.opciones_respuestas;
-            if (typeof opciones === 'string') {
-                try { opciones = JSON.parse(opciones); } catch(e) { opciones = []; }
-            }
-            return { ...p, opciones_respuestas: opciones };
+            return { ...p, opciones_respuestas: helperSanitizeOpciones(p.opciones_respuestas) };
         });
 
         res.send({ data: result });
@@ -452,14 +455,15 @@ const getAdminPreguntas = async (req, res) => {
 const crearPregunta = async (req, res) => {
     try {
         const { id_modulo, pregunta, opciones_respuestas, respuesta_verdadera } = req.body;
-        const opcionesJson = Array.isArray(opciones_respuestas) ? JSON.stringify(opciones_respuestas) : opciones_respuestas;
+        const opcionesClean = helperSanitizeOpciones(opciones_respuestas);
+
         const nueva = await introduccionModuloPreguntasModels.create({
             id_modulo: Number(id_modulo),
             pregunta,
-            opciones_respuestas: opcionesJson,
+            opciones_respuestas: opcionesClean,
             respuesta_verdadera: String(respuesta_verdadera).trim()
         });
-        res.send({ data: nueva });
+        res.send({ data: { ...nueva.toJSON(), opciones_respuestas: opcionesClean } });
     } catch (error) {
         console.error("Error en crearPregunta:", error);
         httpError(res, "ERROR_CREAR_PREGUNTA", 500);
@@ -478,12 +482,12 @@ const actualizarPregunta = async (req, res) => {
 
         if (pregunta !== undefined) registro.pregunta = pregunta;
         if (opciones_respuestas !== undefined) {
-            registro.opciones_respuestas = Array.isArray(opciones_respuestas) ? JSON.stringify(opciones_respuestas) : opciones_respuestas;
+            registro.opciones_respuestas = helperSanitizeOpciones(opciones_respuestas);
         }
         if (respuesta_verdadera !== undefined) registro.respuesta_verdadera = String(respuesta_verdadera).trim();
 
         await registro.save();
-        res.send({ data: registro });
+        res.send({ data: { ...registro.toJSON(), opciones_respuestas: helperSanitizeOpciones(registro.opciones_respuestas) } });
     } catch (error) {
         console.error("Error en actualizarPregunta:", error);
         httpError(res, "ERROR_ACTUALIZAR_PREGUNTA", 500);
