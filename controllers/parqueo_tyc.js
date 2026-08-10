@@ -88,18 +88,19 @@ const getUsuarioElectroHubByEmpresa = async (req, res) => {
         const usuariosEmpresa = await usuarioModels.findAll({
             where: {
                 usu_empresa: nombreEmpresa,
-                usu_prueba: {
-                    [Op.not]: ['1', '-1']
-                }
+                [Op.or]: [
+                    { usu_prueba: { [Op.notIn]: ['1', '-1', 1, -1] } },
+                    { usu_prueba: null }
+                ]
             },
-            attributes: ['usu_documento', 'usu_nombre']
+            attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_telefono']
         });
 
         if (usuariosEmpresa.length === 0) {
             return res.send({ data: [] });
         }
 
-        const documentosUsuarios = usuariosEmpresa.map(u => u.usu_documento);
+        const documentosUsuarios = usuariosEmpresa.map(u => String(u.usu_documento));
 
         const usuariosParqueo = await TyCParqueoModels.findAll({
             where: {
@@ -132,15 +133,22 @@ const getUsuarioElectroHubByEmpresa = async (req, res) => {
             group: ['usuario']
         });
 
-        const usuariosConNombre = usuariosParqueo.map(usuarioParqueo => {
-            const usuarioInfo = usuariosEmpresa.find(u => u.usu_documento === usuarioParqueo.usuario);
-            const parqueosCount = parqueosCounts.find(p => p.usuario === usuarioParqueo.usuario);
+        const usuariosConNombre = usuariosEmpresa.map(usuario => {
+            const docStr = String(usuario.usu_documento);
+            const usuarioParqueo = usuariosParqueo.find(p => String(p.usuario) === docStr);
+            const parqueosCount = parqueosCounts.find(p => String(p.usuario) === docStr);
             
-          return {
-                ...usuarioParqueo.dataValues,
-                nombre_usuario: usuarioInfo ? usuarioInfo.usu_nombre : 'Usuario no encontrado',
-                documento: usuarioInfo ? usuarioInfo.usu_documento : 'Documento no encontrado',
-                total_parqueos: parqueosCount ? parqueosCount.dataValues.total_parqueos : 0
+            return {
+                ...(usuarioParqueo ? usuarioParqueo.dataValues : {}),
+                usuario: docStr,
+                documento: docStr,
+                nombre_usuario: usuario.usu_nombre || 'Sin nombre',
+                telefono: (usuarioParqueo && usuarioParqueo.telefono) ? usuarioParqueo.telefono : (usuario.usu_telefono || ''),
+                email: (usuarioParqueo && usuarioParqueo.email) ? usuarioParqueo.email : (usuario.usu_email || ''),
+                saldo: usuarioParqueo ? usuarioParqueo.saldo : 0,
+                estado: usuarioParqueo ? usuarioParqueo.estado : 'inactivo',
+                fecha_inscripcion: usuarioParqueo ? usuarioParqueo.fecha_inscripcion : null,
+                total_parqueos: parqueosCount ? Number(parqueosCount.dataValues ? parqueosCount.dataValues.total_parqueos : parqueosCount.total_parqueos || 0) : 0
             };
         });
 
