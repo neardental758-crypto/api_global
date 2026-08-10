@@ -1,6 +1,7 @@
-const { introduccionModulosModels, introduccionModuloPreguntasModels, introduccionModuloUsuarioModels } = require('../models');
+const { introduccionModulosModels, introduccionModuloPreguntasModels, introduccionModuloUsuarioModels, usuarioModels, empresaModels } = require('../models');
 const { httpError } = require('../utils/handleError');
 const { Op } = require('sequelize');
+const { enviarCertificadoMovilidad } = require('../utils/emailCertificadoMovilidad');
 
 /**
  * Obtener id de usuario del token o req
@@ -264,13 +265,62 @@ const finalizarModulo = async (req, res) => {
         const moduloSiguiente = modulosActualizados.find((m) => m.orden === moduloActual.orden + 1);
         const siguienteDesbloqueado = moduloSiguiente ? moduloSiguiente.disponible : false;
 
+        let certificadoEnviado = false;
+        let emailDestino = null;
+
+        if (estadoDb === 'APROBADA') {
+            try {
+                const usuario = await usuarioModels.findOne({
+                    where: {
+                        [Op.or]: [
+                            { usu_documento: String(userId) },
+                            { usu_email: String(userId) }
+                        ]
+                    },
+                    raw: true
+                });
+
+                if (usuario && usuario.usu_email) {
+                    emailDestino = usuario.usu_email;
+                    let empresaObj = null;
+                    if (usuario.usu_empresa) {
+                        empresaObj = await empresaModels.findOne({
+                            where: { emp_nombre: usuario.usu_empresa },
+                            raw: true
+                        });
+                    }
+
+                    enviarCertificadoMovilidad({
+                        to: usuario.usu_email,
+                        userName: usuario.usu_nombre || 'Usuario',
+                        userDocument: usuario.usu_documento || String(userId),
+                        tituloModulo: moduloActual.titulo || 'Submódulo',
+                        aciertos: aciertos,
+                        totalPreguntas: totalPreguntas,
+                        porcentaje: porcentaje,
+                        empresaObj: empresaObj
+                    }).then((result) => {
+                        console.log(`[finalizarModulo] Resultado de envío de certificado:`, result);
+                    }).catch((err) => {
+                        console.error(`[finalizarModulo] Error enviando certificado:`, err);
+                    });
+
+                    certificadoEnviado = true;
+                }
+            } catch (errCert) {
+                console.error("Error al preparar envío de certificado:", errCert);
+            }
+        }
+
         res.send({
             estado: estadoPrueba,
             respuestas_correctas: aciertos,
             total_preguntas: totalPreguntas,
             min_preguntas_aprobar: minAprobar,
             porcentaje: porcentaje,
-            siguiente_modulo_desbloqueado: siguienteDesbloqueado
+            siguiente_modulo_desbloqueado: siguienteDesbloqueado,
+            certificado_enviado: certificadoEnviado,
+            email_destino: emailDestino
         });
     } catch (error) {
         console.error("Error en finalizarModulo:", error);
