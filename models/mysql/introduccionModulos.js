@@ -13,6 +13,11 @@ const IntroduccionModulos = sequelize.define(
             type: DataTypes.STRING(255),
             allowNull: false
         },
+        empresa: {
+            type: DataTypes.STRING(255),
+            allowNull: true,
+            defaultValue: 'TODAS'
+        },
         url_video: {
             type: DataTypes.TEXT,
             allowNull: false

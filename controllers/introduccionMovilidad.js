@@ -60,6 +60,32 @@ const helperCalcularSecuencia = async (userId) => {
         raw: true
     });
 
+    // Consultar información del usuario para saber su empresa
+    let usuEmpresa = null;
+    if (userId && userId !== 'default_user') {
+        const usr = await usuarioModels.findOne({
+            where: {
+                [Op.or]: [
+                    { usu_documento: String(userId) },
+                    { usu_email: String(userId) }
+                ]
+            },
+            raw: true
+        });
+        if (usr && usr.usu_empresa) {
+            usuEmpresa = String(usr.usu_empresa).trim().toLowerCase();
+        }
+    }
+
+    // Filtrar submódulos permitidos para la empresa del usuario
+    const modulosFiltrados = modulos.filter((m) => {
+        if (!m.empresa) return true;
+        const empMod = String(m.empresa).trim().toLowerCase();
+        if (empMod === 'todas' || empMod === 'general' || empMod === '' || empMod === 'null') return true;
+        if (!usuEmpresa) return true;
+        return empMod === usuEmpresa;
+    });
+
     // Consultar el progreso del usuario
     const progresosUsuario = await introduccionModuloUsuarioModels.findAll({
         where: { id_usuario: String(userId) },
@@ -74,8 +100,8 @@ const helperCalcularSecuencia = async (userId) => {
     const modulosCalculados = [];
     let previoAprobado = true; // El primer módulo siempre está disponible inicialmente
 
-    for (let i = 0; i < modulos.length; i++) {
-        const mod = modulos[i];
+    for (let i = 0; i < modulosFiltrados.length; i++) {
+        const mod = modulosFiltrados[i];
         const modId = Number(mod.id);
         const estadoGuardado = mapaProgreso.get(modId);
 
@@ -106,6 +132,7 @@ const helperCalcularSecuencia = async (userId) => {
         modulosCalculados.push({
             id: mod.id,
             titulo: mod.titulo,
+            empresa: mod.empresa || 'TODAS',
             url_video: sanitizeVideoUrl(mod.url_video),
             orden: mod.orden,
             total_preguntas: mod.total_preguntas,
@@ -371,9 +398,10 @@ const getAdminModulos = async (req, res) => {
  */
 const crearModulo = async (req, res) => {
     try {
-        const { titulo, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const nuevo = await introduccionModulosModels.create({
             titulo,
+            empresa: empresa || 'TODAS',
             url_video: sanitizeVideoUrl(url_video),
             orden: Number(orden) || 1,
             total_preguntas: Number(total_preguntas) || 5,
@@ -393,11 +421,12 @@ const crearModulo = async (req, res) => {
 const actualizarModulo = async (req, res) => {
     try {
         const { id } = req.params;
-        const { titulo, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const modulo = await introduccionModulosModels.findByPk(id);
         if (!modulo) return res.status(404).send({ error: "MODULO_NO_ENCONTRADO" });
 
         if (titulo !== undefined) modulo.titulo = titulo;
+        if (empresa !== undefined) modulo.empresa = empresa;
         if (url_video !== undefined) modulo.url_video = sanitizeVideoUrl(url_video);
         if (orden !== undefined) modulo.orden = Number(orden);
         if (total_preguntas !== undefined) modulo.total_preguntas = Number(total_preguntas);
