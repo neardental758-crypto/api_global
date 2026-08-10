@@ -1,7 +1,50 @@
-const { introduccionModulosModels, introduccionModuloPreguntasModels, introduccionModuloUsuarioModels, usuarioModels, empresaModels } = require('../models');
+const { introduccionModulosModels, introduccionModuloPreguntasModels, introduccionModuloUsuarioModels, introduccionModuloEmpresasModels, usuarioModels, empresaModels } = require('../models');
 const { httpError } = require('../utils/handleError');
 const { Op } = require('sequelize');
 const { enviarCertificadoMovilidad } = require('../utils/emailCertificadoMovilidad');
+
+const helperGetEmpresasSubmodulo = async (idModulo) => {
+    try {
+        if (!introduccionModuloEmpresasModels) return ['TODAS'];
+        const rels = await introduccionModuloEmpresasModels.findAll({
+            where: { id_modulo: Number(idModulo) },
+            raw: true
+        });
+        if (!rels || rels.length === 0) return ['TODAS'];
+        return rels.map((r) => r.empresa);
+    } catch (e) {
+        return ['TODAS'];
+    }
+};
+
+const helperSyncEmpresasSubmodulo = async (idModulo, empresasInput) => {
+    try {
+        if (!introduccionModuloEmpresasModels) return;
+        await introduccionModuloEmpresasModels.destroy({ where: { id_modulo: Number(idModulo) } });
+        
+        let empresasArr = [];
+        if (Array.isArray(empresasInput)) {
+            empresasArr = empresasInput;
+        } else if (typeof empresasInput === 'string' && empresasInput.trim() !== '') {
+            empresasArr = empresasInput.split(',').map((e) => e.trim());
+        }
+        
+        if (empresasArr.length === 0) {
+            empresasArr = ['TODAS'];
+        }
+
+        for (const emp of empresasArr) {
+            if (emp) {
+                await introduccionModuloEmpresasModels.create({
+                    id_modulo: Number(idModulo),
+                    empresa: emp
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Error sincronizando empresas de submódulo:", e);
+    }
+};
 
 const helperSanitizeOpciones = (opciones) => {
     let result = opciones;
@@ -77,13 +120,28 @@ const helperCalcularSecuencia = async (userId) => {
         }
     }
 
+    // Consultar mapa de empresas por submódulo (asociación muchos a muchos)
+    let empresasMap = new Map();
+    try {
+        if (introduccionModuloEmpresasModels) {
+            const rels = await introduccionModuloEmpresasModels.findAll({ raw: true });
+            rels.forEach((r) => {
+                const list = empresasMap.get(Number(r.id_modulo)) || [];
+                list.push(String(r.empresa).trim().toLowerCase());
+                empresasMap.set(Number(r.id_modulo), list);
+            });
+        }
+    } catch (e) {
+        console.warn("Tabla introduccion_modulo_empresas aún no creada o sin datos.");
+    }
+
     // Filtrar submódulos permitidos para la empresa del usuario
     const modulosFiltrados = modulos.filter((m) => {
-        if (!m.empresa) return true;
-        const empMod = String(m.empresa).trim().toLowerCase();
-        if (empMod === 'todas' || empMod === 'general' || empMod === '' || empMod === 'null') return true;
+        const empAssigned = empresasMap.get(Number(m.id));
+        if (!empAssigned || empAssigned.length === 0) return true;
+        if (empAssigned.includes('todas') || empAssigned.includes('general') || empAssigned.includes('')) return true;
         if (!usuEmpresa) return true;
-        return empMod === usuEmpresa;
+        return empAssigned.includes(usuEmpresa);
     });
 
     // Consultar el progreso del usuario
@@ -129,10 +187,12 @@ const helperCalcularSecuencia = async (userId) => {
         // Para el siguiente ciclo, se requiere que ESTE submódulo esté aprobado
         previoAprobado = isApproved;
 
+        const empresasSubmodulo = await helperGetEmpresasSubmodulo(mod.id);
         modulosCalculados.push({
             id: mod.id,
             titulo: mod.titulo,
-            empresa: mod.empresa || 'TODAS',
+            empresa: empresasSubmodulo.join(', '),
+            empresas: empresasSubmodulo,
             url_video: sanitizeVideoUrl(mod.url_video),
             orden: mod.orden,
             total_preguntas: mod.total_preguntas,
@@ -380,8 +440,11 @@ const getAdminModulos = async (req, res) => {
             const countPreguntas = await introduccionModuloPreguntasModels.count({
                 where: { id_modulo: m.id }
             });
+            const empresasAsignadas = await helperGetEmpresasSubmodulo(m.id);
             return {
                 ...m,
+                empresa: empresasAsignadas.join(', '),
+                empresas: empresasAsignadas,
                 total_preguntas_registradas: countPreguntas
             };
         }));
@@ -398,17 +461,26 @@ const getAdminModulos = async (req, res) => {
  */
 const crearModulo = async (req, res) => {
     try {
-        const { titulo, empresa, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, empresas, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const nuevo = await introduccionModulosModels.create({
             titulo,
-            empresa: empresa || 'TODAS',
             url_video: sanitizeVideoUrl(url_video),
             orden: Number(orden) || 1,
             total_preguntas: Number(total_preguntas) || 5,
             min_preguntas_aprobar: Number(min_preguntas_aprobar) || 4,
             estado: estado || 'ACTIVA'
         });
-        res.send({ data: nuevo });
+
+        await helperSyncEmpresasSubmodulo(nuevo.id, empresas || empresa);
+        const empresasAsignadas = await helperGetEmpresasSubmodulo(nuevo.id);
+
+        res.send({
+            data: {
+                ...nuevo.toJSON(),
+                empresa: empresasAsignadas.join(', '),
+                empresas: empresasAsignadas
+            }
+        });
     } catch (error) {
         console.error("Error en crearModulo:", error);
         httpError(res, "ERROR_CREAR_MODULO", 500);
@@ -421,12 +493,11 @@ const crearModulo = async (req, res) => {
 const actualizarModulo = async (req, res) => {
     try {
         const { id } = req.params;
-        const { titulo, empresa, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, empresas, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const modulo = await introduccionModulosModels.findByPk(id);
         if (!modulo) return res.status(404).send({ error: "MODULO_NO_ENCONTRADO" });
 
         if (titulo !== undefined) modulo.titulo = titulo;
-        if (empresa !== undefined) modulo.empresa = empresa;
         if (url_video !== undefined) modulo.url_video = sanitizeVideoUrl(url_video);
         if (orden !== undefined) modulo.orden = Number(orden);
         if (total_preguntas !== undefined) modulo.total_preguntas = Number(total_preguntas);
@@ -434,7 +505,20 @@ const actualizarModulo = async (req, res) => {
         if (estado !== undefined) modulo.estado = estado;
 
         await modulo.save();
-        res.send({ data: modulo });
+
+        if (empresas !== undefined || empresa !== undefined) {
+            await helperSyncEmpresasSubmodulo(modulo.id, empresas !== undefined ? empresas : empresa);
+        }
+
+        const empresasAsignadas = await helperGetEmpresasSubmodulo(modulo.id);
+
+        res.send({
+            data: {
+                ...modulo.toJSON(),
+                empresa: empresasAsignadas.join(', '),
+                empresas: empresasAsignadas
+            }
+        });
     } catch (error) {
         console.error("Error en actualizarModulo:", error);
         httpError(res, "ERROR_ACTUALIZAR_MODULO", 500);

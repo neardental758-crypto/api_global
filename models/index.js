@@ -139,6 +139,7 @@ if (MOTORDB === 'mysql') {
         introduccionModulosModels: require('./mysql/introduccionModulos'),
         introduccionModuloPreguntasModels: require('./mysql/introduccionModuloPreguntas'),
         introduccionModuloUsuarioModels: require('./mysql/introduccionModuloUsuario'),
+        introduccionModuloEmpresasModels: require('./mysql/introduccionModuloEmpresas'),
         categoriaComponenteModels: require('./mysql/categoria_componente'),
         componenteModels: require('./mysql/componente'),
         estadoComponenteModels: require('./mysql/estado_componente'),
