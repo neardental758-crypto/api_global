@@ -52,8 +52,7 @@ const validatorUpdateUsuario = [
         .notEmpty()
         .isString(),
     body("saldo")
-        .exists()
-        .notEmpty()
+        .optional()
         .isNumeric()
         .isInt({ min: 0 }),
     body("estado")
@@ -62,6 +61,26 @@ const validatorUpdateUsuario = [
         .isString()
         .isIn(['activo', 'inactivo'])
         .withMessage('El estado debe ser "activo" o "inactivo"'),
+    (req, res, next) => {
+        return validateResults(req, res, next);
+    }
+];
+
+const validatorRecargarSaldo = [
+    body("usuario")
+        .exists()
+        .notEmpty()
+        .withMessage("El usuario es requerido"),
+    body("valor")
+        .exists()
+        .isNumeric()
+        .isInt({ min: 1 })
+        .withMessage("Las horas a recargar deben ser un número mayor a 0"),
+    body("concepto")
+        .exists()
+        .notEmpty()
+        .isString()
+        .withMessage("El concepto o número de transacción es requerido"),
     (req, res, next) => {
         return validateResults(req, res, next);
     }
@@ -85,4 +104,13 @@ const validatorMassiveUpdateSaldos = [
     }
 ];
 
-module.exports = { validatorCreate, validatorID, validator_update, validator_update_saldo, validatorGetOrganizacion, validatorUpdateUsuario,validatorMassiveUpdateSaldos};
+module.exports = { 
+    validatorCreate, 
+    validatorID, 
+    validator_update, 
+    validator_update_saldo, 
+    validatorGetOrganizacion, 
+    validatorUpdateUsuario,
+    validatorRecargarSaldo,
+    validatorMassiveUpdateSaldos
+};

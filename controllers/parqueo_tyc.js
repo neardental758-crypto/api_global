@@ -1,5 +1,5 @@
 const { matchedData } = require('express-validator');
-const { TyCParqueoModels, usuarioModels, empresaModels, rentaParqueoModels} = require('../models');
+const { TyCParqueoModels, usuarioModels, empresaModels, rentaParqueoModels, parqueoMovimientosModels } = require('../models');
 const { httpError } = require('../utils/handleError');
 const { Op } = require('sequelize');
 const { sequelize } = require('../config/mysql');
@@ -227,13 +227,6 @@ const updateUsuarioElectroHub = async (req, res) => {
             });
         }
 
-        if (saldo === undefined || saldo === null) {
-            return res.status(400).send({ 
-                message: "Saldo no proporcionado",
-                success: false 
-            });
-        }
-
         if (!estado || !['activo', 'inactivo'].includes(estado)) {
             return res.status(400).send({ 
                 message: "Estado debe ser 'activo' o 'inactivo'",
@@ -241,11 +234,13 @@ const updateUsuarioElectroHub = async (req, res) => {
             });
         }
 
+        const updateFields = { estado: estado };
+        if (saldo !== undefined && saldo !== null) {
+            updateFields.saldo = saldo;
+        }
+
         const data = await TyCParqueoModels.update(
-            { 
-                saldo: saldo,
-                estado: estado 
-            },
+            updateFields,
             { where: { usuario: usuario } }
         );
 
@@ -259,7 +254,6 @@ const updateUsuarioElectroHub = async (req, res) => {
         res.send({ 
             message: "Usuario actualizado correctamente",
             success: true,
-            saldo: saldo,
             estado: estado,
             updatedAt: new Date().toISOString()
         });
@@ -267,6 +261,83 @@ const updateUsuarioElectroHub = async (req, res) => {
         console.error('Error al actualizar usuario ElectroHub:', error);
         res.status(500).send({
             message: "Error interno del servidor",
+            error: error.message,
+            success: false
+        });
+    }
+};
+
+const recargarSaldoUsuario = async (req, res) => {
+    try {
+        const { usuario, valor, concepto, parqueo } = req.body;
+        
+        if (!usuario || valor === undefined || valor === null || !concepto) {
+            return res.status(400).send({
+                message: "Usuario, valor (horas) y concepto son requeridos",
+                success: false
+            });
+        }
+
+        const horas = parseInt(valor);
+        if (isNaN(horas) || horas <= 0) {
+            return res.status(400).send({
+                message: "Las horas a recargar deben ser mayores a 0",
+                success: false
+            });
+        }
+
+        const usuarioDoc = String(usuario).trim();
+
+        // Buscar o crear registro de TyCParqueo
+        let usuarioTyC = await TyCParqueoModels.findOne({
+            where: { usuario: usuarioDoc }
+        });
+
+        const saldoActual = usuarioTyC ? (parseInt(usuarioTyC.saldo) || 0) : 0;
+        const nuevoSaldo = saldoActual + horas;
+
+        if (usuarioTyC) {
+            await TyCParqueoModels.update(
+                { saldo: nuevoSaldo },
+                { where: { usuario: usuarioDoc } }
+            );
+        } else {
+            await TyCParqueoModels.create({
+                usuario: usuarioDoc,
+                fecha_inscripcion: new Date().toISOString(),
+                ultimo_vehiculo: '',
+                telefono: '',
+                email: '',
+                saldo: nuevoSaldo,
+                estado: 'activo'
+            });
+        }
+
+        // Crear registro en parqueo_movimientos
+        const idMovimiento = 'MOV-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+        const fechaRegistro = new Date().toISOString();
+
+        await parqueoMovimientosModels.create({
+            id: idMovimiento,
+            usuario: usuarioDoc,
+            parqueo: parqueo || null,
+            fecha_registro: fechaRegistro,
+            valor: horas,
+            concepto: String(concepto).trim()
+        });
+
+        res.send({
+            message: "Saldo recargado correctamente",
+            success: true,
+            saldoAnterior: saldoActual,
+            nuevoSaldo: nuevoSaldo,
+            horasRecargadas: horas,
+            movimientoId: idMovimiento
+        });
+    } catch (error) {
+        console.error('Error al recargar saldo de usuario:', error);
+        res.status(500).send({
+            message: "Error al registrar la recarga de saldo",
             error: error.message,
             success: false
         });
@@ -374,5 +445,5 @@ const processMassiveUpdateSaldos = async (req, res) => {
 const deleteItem = (req, res) => { };
 
 module.exports = {
-    getItems, getItem, createItem, updateItem, deleteItem, getUsuarioElectroHubByEmpresa, updateUsuarioElectroHub, updateItem_saldo, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario
+    getItems, getItem, createItem, updateItem, deleteItem, getUsuarioElectroHubByEmpresa, updateUsuarioElectroHub, recargarSaldoUsuario, updateItem_saldo, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario
 }

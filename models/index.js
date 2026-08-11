@@ -131,6 +131,7 @@ if (MOTORDB === 'mysql') {
         reservasParqueoModels: require('./mysql/parqueo_reservas'),
         feedbackParqueoModels: require('./mysql/parqueo_feedback'),
         TyCParqueoModels: require('./mysql/parqueo_tyc'),
+        parqueoMovimientosModels: require('./mysql/parqueo_movimientos'),
         horariosParqeuaderoModels: require('./mysql/parqueo_horarios'),
         contenidoModel: require('./mysql/contenido'),
         preguntasBrainModel: require('./mysql/preguntasBrain'),

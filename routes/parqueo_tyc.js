@@ -2,9 +2,9 @@
 const express = require('express');
 const router = express.Router();
 const { validatorCreate, validatorID, validator_update, validatorGetOrganizacion, validatorUpdateUsuario, 
-    validator_update_saldo, validatorMassiveUpdateSaldos } = require('../validators/parqueo_tyc_validators');
+    validatorRecargarSaldo, validator_update_saldo, validatorMassiveUpdateSaldos } = require('../validators/parqueo_tyc_validators');
 const {  getItems, getItem, createItem, updateItem, updateItem_saldo, deleteItem, getUsuarioElectroHubByEmpresa,
-     updateUsuarioElectroHub, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario } = require('../controllers/parqueo_tyc');
+     updateUsuarioElectroHub, recargarSaldoUsuario, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario } = require('../controllers/parqueo_tyc');
 const authMiddleware = require('../middleware/session');
 
 router.get("/", authMiddleware(["all"]), getItems);
@@ -18,6 +18,8 @@ router.post("/update_vel", authMiddleware(["all"]), validator_update, updateItem
 router.get("/usuario-electrohub/:idOrganizacion", authMiddleware(["all"]), validatorGetOrganizacion, getUsuarioElectroHubByEmpresa);
 
 router.patch("/update-usuario/:usuario", authMiddleware(["all"]), validatorUpdateUsuario, updateUsuarioElectroHub);
+
+router.post("/recargar-saldo", authMiddleware(["all"]), validatorRecargarSaldo, recargarSaldoUsuario);
 
 router.post("/update_saldo", authMiddleware(["all"]), validator_update_saldo, updateItem_saldo);
 
