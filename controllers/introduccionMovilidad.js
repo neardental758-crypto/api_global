@@ -393,7 +393,9 @@ const finalizarModulo = async (req, res) => {
                         aciertos: aciertos,
                         totalPreguntas: totalPreguntas,
                         porcentaje: porcentaje,
-                        empresaObj: empresaObj
+                        empresaObj: empresaObj,
+                        plantilla: req.body.plantilla || req.headers['x-app-plantilla'],
+                        urlLogo: moduloDb ? moduloDb.url_logo : null
                     }).then((result) => {
                         console.log(`[finalizarModulo] Resultado de envío de certificado:`, result);
                     }).catch((err) => {
@@ -462,10 +464,11 @@ const getAdminModulos = async (req, res) => {
  */
 const crearModulo = async (req, res) => {
     try {
-        const { titulo, empresa, empresas, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, empresas, url_video, url_logo, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const nuevo = await introduccionModulosModels.create({
             titulo,
             url_video: sanitizeVideoUrl(url_video),
+            url_logo: url_logo ? String(url_logo).trim() : null,
             orden: Number(orden) || 1,
             total_preguntas: Number(total_preguntas) || 5,
             min_preguntas_aprobar: Number(min_preguntas_aprobar) || 4,
@@ -494,12 +497,13 @@ const crearModulo = async (req, res) => {
 const actualizarModulo = async (req, res) => {
     try {
         const { id } = req.params;
-        const { titulo, empresa, empresas, url_video, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
+        const { titulo, empresa, empresas, url_video, url_logo, orden, total_preguntas, min_preguntas_aprobar, estado } = req.body;
         const modulo = await introduccionModulosModels.findByPk(id);
         if (!modulo) return res.status(404).send({ error: "MODULO_NO_ENCONTRADO" });
 
         if (titulo !== undefined) modulo.titulo = titulo;
         if (url_video !== undefined) modulo.url_video = sanitizeVideoUrl(url_video);
+        if (url_logo !== undefined) modulo.url_logo = url_logo ? String(url_logo).trim() : null;
         if (orden !== undefined) modulo.orden = Number(orden);
         if (total_preguntas !== undefined) modulo.total_preguntas = Number(total_preguntas);
         if (min_preguntas_aprobar !== undefined) modulo.min_preguntas_aprobar = Number(min_preguntas_aprobar);

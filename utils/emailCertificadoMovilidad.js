@@ -23,7 +23,9 @@ const enviarCertificadoMovilidad = async ({
     aciertos,
     totalPreguntas,
     porcentaje,
-    empresaObj
+    empresaObj,
+    plantilla,
+    urlLogo
 }) => {
     try {
         if (!to) {
@@ -31,7 +33,13 @@ const enviarCertificadoMovilidad = async ({
             return { success: false, error: 'NO_DESTINATARIO' };
         }
 
-        const appType = (empresaObj && empresaObj.aplicacion) ? String(empresaObj.aplicacion).toLowerCase() : 'ride';
+        let appType = 'ride';
+        if (plantilla && String(plantilla).toLowerCase().trim() === 'meb') {
+            appType = 'meb';
+        } else if (empresaObj && empresaObj.aplicacion && String(empresaObj.aplicacion).toLowerCase().trim() === 'meb') {
+            appType = 'meb';
+        }
+
         const empNombre = (empresaObj && empresaObj.emp_nombre) ? empresaObj.emp_nombre.toUpperCase() : 'ORGANIZACIÓN';
 
         let emailConfig, templateConfig;
@@ -54,11 +62,11 @@ const enviarCertificadoMovilidad = async ({
                 pass: 'cfgp eoer gfsk xsfm'
             };
             templateConfig = {
-                primaryColor: '#2E7D32',
-                secondaryColor: '#4CAF50',
-                tertiaryColor: '#1B5E20',
+                primaryColor: '#D32F2F',
+                secondaryColor: '#EF5350',
+                tertiaryColor: '#B71C1C',
                 logoSrc: 'cid:logoBicycleCapital',
-                companyName: 'Bicycle Capital'
+                companyName: 'Ride / Bicycle Capital'
             };
         }
 
@@ -144,7 +152,7 @@ const enviarCertificadoMovilidad = async ({
                               <img src="cid:goldenBadge" alt="Insignia de Logro" width="120" style="display: block; margin: 0 auto; max-width: 120px;" />
                           </td>
                           <td align="center" width="50%">
-                              <img src="${templateConfig.logoSrc}" alt="Logo Marca" width="150" style="display: block; margin: 0 auto; max-width: 150px;" />
+                              <img src="${(urlLogo && typeof urlLogo === 'string' && urlLogo.trim() !== '') ? urlLogo.trim() : templateConfig.logoSrc}" alt="Logo Certificado" width="150" style="display: block; margin: 0 auto; max-width: 150px; max-height: 90px; object-fit: contain;" />
                           </td>
                       </tr>
                   </table>

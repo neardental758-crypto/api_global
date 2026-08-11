@@ -17,6 +17,10 @@ const IntroduccionModulos = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: false
         },
+        url_logo: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
         orden: {
             type: DataTypes.INTEGER,
             allowNull: false
