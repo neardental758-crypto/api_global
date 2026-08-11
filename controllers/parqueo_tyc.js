@@ -344,6 +344,70 @@ const recargarSaldoUsuario = async (req, res) => {
     }
 };
 
+const getMovimientosElectroHubByEmpresa = async (req, res) => {
+    try {
+        req = matchedData(req);
+        const { idOrganizacion } = req;
+
+        const empresa = await empresaModels.findOne({
+            where: { emp_id: idOrganizacion },
+            attributes: ['emp_nombre']
+        });
+
+        if (!empresa) {
+            return res.status(404).send({ 
+                message: "Organización no encontrada",
+                data: [] 
+            });
+        }
+
+        const nombreEmpresa = empresa.emp_nombre;
+
+        const usuariosEmpresa = await usuarioModels.findAll({
+            where: {
+                usu_empresa: nombreEmpresa,
+                [Op.or]: [
+                    { usu_prueba: { [Op.notIn]: ['1', '-1', 1, -1] } },
+                    { usu_prueba: null }
+                ]
+            },
+            attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_telefono']
+        });
+
+        if (usuariosEmpresa.length === 0) {
+            return res.send({ data: [] });
+        }
+
+        const documentosUsuarios = usuariosEmpresa.map(u => String(u.usu_documento));
+
+        const movimientos = await parqueoMovimientosModels.findAll({
+            where: {
+                usuario: {
+                    [Op.in]: documentosUsuarios
+                }
+            },
+            order: [['fecha_registro', 'DESC']]
+        });
+
+        const movimientosConUsuario = movimientos.map(mov => {
+            const docStr = String(mov.usuario);
+            const user = usuariosEmpresa.find(u => String(u.usu_documento) === docStr);
+            return {
+                ...mov.dataValues,
+                documento: docStr,
+                nombre_usuario: user ? (user.usu_nombre || 'Sin nombre') : 'Sin nombre',
+                email: user ? user.usu_email : '',
+                telefono: user ? user.usu_telefono : ''
+            };
+        });
+
+        res.send({ data: movimientosConUsuario });
+    } catch (error) {
+        console.error('Error al obtener movimientos de ElectroHub:', error);
+        httpError(res, "ERROR_GET_MOVIMIENTOS_ELECTROHUB");
+    }
+};
+
 
 const updateItem_saldo = async (req, res) => {
     try {
@@ -445,5 +509,5 @@ const processMassiveUpdateSaldos = async (req, res) => {
 const deleteItem = (req, res) => { };
 
 module.exports = {
-    getItems, getItem, createItem, updateItem, deleteItem, getUsuarioElectroHubByEmpresa, updateUsuarioElectroHub, recargarSaldoUsuario, updateItem_saldo, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario
+    getItems, getItem, createItem, updateItem, deleteItem, getUsuarioElectroHubByEmpresa, updateUsuarioElectroHub, recargarSaldoUsuario, getMovimientosElectroHubByEmpresa, updateItem_saldo, processMassiveUpdateSaldos, getHistorialParqueosUsuario, getVehiculosUsuario
 }
