@@ -758,26 +758,27 @@ const verificarNotificacionesProgramadas = async () => {
             if (user.token && user.token.trim() !== '' && user.token.length > 140) {
               try {
                 const messageId = `msg_${Date.now()}_${user.documento}`;
+                const isHttpUrl = imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
                 const pushMessage = {
                   token: user.token,
                   notification: {
                     title: subject || 'Notificación',
                     body: message || 'Mensaje',
-                    ...(imageUrl ? { image: imageUrl } : {})
+                    ...(isHttpUrl ? { image: imageUrl } : {})
                   },
                   android: {
                     priority: 'high',
                     notification: {
                       sound: 'default',
                       channelId: 'high_importance_channel',
-                      ...(imageUrl ? { image: imageUrl } : {})
+                      ...(isHttpUrl ? { image: imageUrl } : {})
                     },
                     data: {
                       click_action: 'FLUTTER_NOTIFICATION_CLICK',
                       messageType: messageType,
                       messageId: messageId,
                       isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
-                      ...(imageUrl ? { imageUrl: imageUrl } : {})
+                      ...(isHttpUrl ? { imageUrl: imageUrl } : {})
                     }
                   },
                   apns: {
@@ -797,7 +798,7 @@ const verificarNotificacionesProgramadas = async () => {
                       }
                     },
                     fcmOptions: {
-                      ...(imageUrl ? { image: imageUrl } : {})
+                      ...(isHttpUrl ? { image: imageUrl } : {})
                     }
                   },
                   data: {
@@ -805,7 +806,7 @@ const verificarNotificacionesProgramadas = async () => {
                     messageId: messageId,
                     isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
                     timestamp: Date.now().toString(),
-                    ...(imageUrl ? { imageUrl: imageUrl } : {})
+                    ...(isHttpUrl ? { imageUrl: imageUrl } : {})
                   }
                 };
 

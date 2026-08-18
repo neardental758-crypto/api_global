@@ -39,6 +39,9 @@ router.post('/', upload.single('image'), async (req, res) => {
         } else if (type === 'vehiculo' || type === 'vpusuario' || type === 'vp_vehiculos_usuario') {
             subDir = 'vehiculos';
             fileNamePrefix = 'vehiculo';
+        } else if (type === 'notificaciones' || type === 'notifications') {
+            subDir = 'notificaciones';
+            fileNamePrefix = 'notificacion';
         }
 
         const targetDir = path.join(rootUploadsDir, subDir);

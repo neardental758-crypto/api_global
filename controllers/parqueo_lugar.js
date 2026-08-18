@@ -196,24 +196,34 @@ const getItemEmpresaId = async (req, res) => {
 
 const updateItemElectroHub = async (req, res) => {
     try {
+        const targetId = req.params.id || req.body.id;
         req = matchedData(req);
         const { id, numero, parqueadero, bluetooth, qr, clave, estado, voltaje } = req;
+        const finalId = targetId || id;
         
-        const parqueaderoExists = await parqueaderosModels.findByPk(parqueadero);
+        let parqueaderoTargetId = parqueadero;
+        let parqueaderoExists = await parqueaderosModels.findByPk(parqueadero);
+        if (!parqueaderoExists) {
+            parqueaderoExists = await parqueaderosModels.findOne({ where: { nombre: parqueadero } });
+            if (parqueaderoExists) {
+                parqueaderoTargetId = parqueaderoExists.id;
+            }
+        }
+        
         if (!parqueaderoExists) {
             return httpError(res, "PARQUEADERO_NOT_FOUND", 404);
         }
         
         const data = await lugarParqueoModels.update({
             numero: numero,
-            parqueadero: parqueadero,
+            parqueadero: parqueaderoTargetId,
             bluetooth: bluetooth,
             qr: qr,
-            clave: clave,
+            clave: clave || "",
             estado: estado,
             voltaje: voltaje
         }, {
-            where: { id: id }
+            where: { id: finalId }
         });
         
         if (data[0] === 0) {

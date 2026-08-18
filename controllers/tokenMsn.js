@@ -218,10 +218,10 @@ const sendNotificationMessage = async (req, res) => {
   try {
     const { users, messageType, message, subject, sendToType, organizationId, imageUrl } = req.body;
     
-    if (imageUrl && imageUrl.length > 100000) {
+    if (imageUrl && imageUrl.startsWith('data:') && imageUrl.length > 5000000) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Imagen demasiado grande. Máximo 100KB permitido.' 
+        error: 'Imagen demasiado grande. Máximo 5MB permitido.' 
       });
     }
     
@@ -334,27 +334,28 @@ const sendNotificationMessage = async (req, res) => {
         if (user.token && user.token.trim() !== '' && user.token.length > 140) {
           try {
             const messageId = `msg_${Date.now()}_${user.documento}`;
+            const isHttpUrl = imageUrl && (imageUrl.startsWith('http://') || imageUrl.startsWith('https://'));
             
     const pushMessage = {
       token: user.token,
       notification: {
         title: subject || 'Notificación',
         body: message || 'Mensaje',
-        ...(imageUrl ? { image: imageUrl } : {})
+        ...(isHttpUrl ? { image: imageUrl } : {})
       },
       android: {
         priority: 'high',
         notification: {
           sound: 'default',
           channelId: 'high_importance_channel',
-          ...(imageUrl ? { image: imageUrl } : {})
+          ...(isHttpUrl ? { image: imageUrl } : {})
         },
         data: {
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
           messageType: messageType,
           messageId: messageId,
           isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
-          ...(imageUrl ? { imageUrl: imageUrl } : {})
+          ...(isHttpUrl ? { imageUrl: imageUrl } : {})
         }
       },
       apns: {
@@ -374,7 +375,7 @@ const sendNotificationMessage = async (req, res) => {
           }
         },
         fcmOptions: {
-          ...(imageUrl ? { image: imageUrl } : {})
+          ...(isHttpUrl ? { image: imageUrl } : {})
         }
       },
       data: {
@@ -382,7 +383,7 @@ const sendNotificationMessage = async (req, res) => {
         messageId: messageId,
         isInApp: ['in-app', 'push-in-app', 'email-in-app', 'all'].includes(messageType).toString(),
         timestamp: Date.now().toString(),
-        ...(imageUrl ? { imageUrl: imageUrl } : {})
+        ...(isHttpUrl ? { imageUrl: imageUrl } : {})
       }
     }; 
                 

@@ -88,11 +88,7 @@ const validatorUpdateElectroHub = [
         .exists()
         .notEmpty(),
     check("clave")
-        .exists()
-        .notEmpty(),
-    check("bluetooth")
-        .exists()
-        .notEmpty(),
+        .optional(),
     check("estado")
         .exists()
         .notEmpty(),
