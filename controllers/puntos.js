@@ -74,8 +74,8 @@ const getItemUsuario_cortezza = async (req, res) => {
     }
 };
 
-const MAIL_USER = 'Servicio@bicyclecapital.co'; 
-const MAIL_PASS = 'fyam ecci wqby fhaj';
+const MAIL_USER = process.env.MAIL_USER || 'contacto@bicyclecapital.co'; 
+const MAIL_PASS = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
 
 const correo__recompensas = async (req, res) => {
   try {

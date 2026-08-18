@@ -348,16 +348,19 @@ const enviarRecordatorioManual = async (req, res) => {
     // 2. Enviar Correo
     if (emailUsuario && emailUsuario.trim() !== '') {
       try {
+        const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+        const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
         const transporter = nodemailer.createTransport({
           service: 'gmail',
           auth: {
-            user: 'Servicio@bicyclecapital.co',
-            pass: 'fyam ecci wqby fhaj'
+            user: mailUser,
+            pass: mailPass
           }
         });
 
         const emailOptions = {
-          from: 'Servicio@bicyclecapital.co',
+          from: `"Bicycle Capital" <${mailUser}>`,
           to: emailUsuario,
           subject: subject,
           html: `<p>${message}</p>`
@@ -500,12 +503,15 @@ const forzarMantenimiento = async (req, res) => {
     // Enviar Email
     if (emailUsuario && emailUsuario.trim() !== '') {
       try {
+        const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+        const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
         const transporter = nodemailer.createTransport({
           service: 'gmail',
-          auth: { user: 'Servicio@bicyclecapital.co', pass: 'fyam ecci wqby fhaj' }
+          auth: { user: mailUser, pass: mailPass }
         });
         await transporter.sendMail({
-          from: 'Servicio@bicyclecapital.co',
+          from: `"Bicycle Capital" <${mailUser}>`,
           to: emailUsuario,
           subject: subject,
           html: `<p>${message}</p>`
@@ -726,12 +732,15 @@ const cancelarYReemplazarMantenimiento = async (req, res) => {
         // Email
         if (emailUsuario && emailUsuario.trim() !== '') {
           try {
+            const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+            const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
             const transporter = nodemailer.createTransport({
               service: 'gmail',
-              auth: { user: 'Servicio@bicyclecapital.co', pass: 'fyam ecci wqby fhaj' }
+              auth: { user: mailUser, pass: mailPass }
             });
             await transporter.sendMail({
-              from: 'Servicio@bicyclecapital.co',
+              from: `"Bicycle Capital" <${mailUser}>`,
               to: emailUsuario,
               subject: subject,
               html: `<p>${message}</p>`

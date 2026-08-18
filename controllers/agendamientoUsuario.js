@@ -262,8 +262,8 @@ const sendApprovalEmail = async (req, res) => {
             };
         } else if (usuario.bc_empresa.aplicacion === 'ride') {
             emailConfig = {
-                user: 'Servicio@bicyclecapital.co',
-                pass: 'fyam ecci wqby fhaj'
+                user: process.env.MAIL_USER || 'contacto@bicyclecapital.co',
+                pass: process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm'
             };
             templateConfig = {
                 primaryColor: '#FFD700',

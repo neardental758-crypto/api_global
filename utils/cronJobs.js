@@ -389,11 +389,14 @@ const verificarPrestamosVencidos = async () => {
 
     console.log(`🚲 [CRON] Se encontraron ${prestamosVencidos.length} préstamos vencidos. Enviando recordatorios...`);
 
+    const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'Servicio@bicyclecapital.co',
-        pass: 'fyam ecci wqby fhaj'
+        user: mailUser,
+        pass: mailPass
       }
     });
 
@@ -483,7 +486,7 @@ Si deseas extender el préstamo, puedes hacerlo desde el chatbot de la aplicaci�
         if (emailUsuario && emailUsuario.trim() !== '') {
           try {
             const emailOptions = {
-              from: 'Servicio@bicyclecapital.co',
+              from: `"Bicycle Capital" <${mailUser}>`,
               to: emailUsuario,
               subject: subject,
               html: `<p>${message.replace(/\n/g, '<br>')}</p>`
@@ -572,11 +575,14 @@ const verificarNotificacionesProgramadas = async () => {
 
     console.log(`🚀 [CRON NOTIFICACIONES] Se encontraron ${matchingTasks.length} tareas programadas para ejecutar.`);
 
+    const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'Servicio@bicyclecapital.co',
-        pass: 'fyam ecci wqby fhaj'
+        user: mailUser,
+        pass: mailPass
       }
     });
 
@@ -712,7 +718,7 @@ const verificarNotificacionesProgramadas = async () => {
           if (['email', 'email-push', 'email-in-app', 'all'].includes(messageType)) {
             try {
               let emailOptions = { 
-                from: 'Servicio@bicyclecapital.co',
+                from: `"Bicycle Capital" <${mailUser}>`,
                 to: user.email,
                 subject: subject,
                 text: message

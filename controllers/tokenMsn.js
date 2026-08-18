@@ -212,8 +212,15 @@ const sendNotificationMessage = async (req, res) => {
   const fs = require('fs');
   const path = require('path');
 
-  const firmaPath = path.join(__dirname, '../assets/firma_milena.jpg');
-  const firmaBase64 = fs.readFileSync(firmaPath).toString('base64');
+  let firmaBase64 = '';
+  try {
+    const firmaPath = path.join(__dirname, '../assets/firma_milena.jpg');
+    if (fs.existsSync(firmaPath)) {
+      firmaBase64 = fs.readFileSync(firmaPath).toString('base64');
+    }
+  } catch (e) {
+    console.warn('Firma no disponible:', e.message);
+  }
 
   try {
     const { users, messageType, message, subject, sendToType, organizationId, imageUrl } = req.body;
@@ -269,62 +276,80 @@ const sendNotificationMessage = async (req, res) => {
     const emailResults = [];
     const pushResults = [];
     
+    const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: mailUser,
+        pass: mailPass
+      }
+    });
+
     for (const user of targetUsers) {
       
     if (['email', 'email-push', 'email-in-app', 'all'].includes(messageType)) {
       try {
-        const transporter = nodemailer.createTransport({
-          service: 'gmail',
-          auth: {
-            user: 'Servicio@bicyclecapital.co',
-            pass: 'fyam ecci wqby fhaj'
-          }
-        });
-        
+        if (!user.email || user.email.trim() === '') {
+          throw new Error('Usuario sin correo electrónico registrado');
+        }
+
         let emailOptions = { 
-          from: 'Servicio@bicyclecapital.co',
+          from: `"Bicycle Capital" <${mailUser}>`,
           to: user.email,
           subject: subject,
           text: message
         };
         
         if (imageUrl && imageUrl.startsWith('data:image')) {
-          emailOptions.attachments = [
+          const attachments = [
             {
               filename: 'imagen.jpg',
               content: imageUrl.split(',')[1],
               encoding: 'base64',
               cid: 'imagen'
-            },
-            {
+            }
+          ];
+          if (firmaBase64) {
+            attachments.push({
               filename: 'firma.png',
               content: firmaBase64,
               encoding: 'base64',
               cid: 'firma'
-            }
-          ];
-          emailOptions.html = `<p>${message}</p><img src="cid:imagen" style="max-width: 200px;"><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+            });
+          }
+          emailOptions.attachments = attachments;
+          emailOptions.html = `<p>${message}</p><img src="cid:imagen" style="max-width: 200px;"><br><br>${firmaBase64 ? '<img src="cid:firma" style="max-width: 400px; width: 100%;">' : ''}`;
         } else if (imageUrl) {
-          emailOptions.attachments = [{
-            filename: 'firma.png',
-            content: firmaBase64,
-            encoding: 'base64',
-            cid: 'firma'
-          }];
-          emailOptions.html = `<p>${message}</p><img src="${imageUrl}" style="max-width: 200px;"><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+          if (firmaBase64) {
+            emailOptions.attachments = [{
+              filename: 'firma.png',
+              content: firmaBase64,
+              encoding: 'base64',
+              cid: 'firma'
+            }];
+          }
+          emailOptions.html = `<p>${message}</p><img src="${imageUrl}" style="max-width: 200px;"><br><br>${firmaBase64 ? '<img src="cid:firma" style="max-width: 400px; width: 100%;">' : ''}`;
         } else {
-          emailOptions.attachments = [{
-            filename: 'firma.png',
-            content: firmaBase64,
-            encoding: 'base64',
-            cid: 'firma'
-          }];
-          emailOptions.html = `<p>${message}</p><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+          if (firmaBase64) {
+            emailOptions.attachments = [{
+              filename: 'firma.png',
+              content: firmaBase64,
+              encoding: 'base64',
+              cid: 'firma'
+            }];
+            emailOptions.html = `<p>${message}</p><br><br><img src="cid:firma" style="max-width: 400px; width: 100%;">`;
+          } else {
+            emailOptions.html = `<p>${message}</p>`;
+          }
         }
         
         await transporter.sendMail(emailOptions);
+        console.log(`✉️ Email enviado con éxito a: ${user.email}`);
         emailResults.push({ documento: user.documento, success: true, type: 'email' });
       } catch (emailError) {
+        console.error(`❌ Error enviando email a ${user.email}:`, emailError.message);
         emailResults.push({ documento: user.documento, success: false, type: 'email', error: emailError.message });
       }
     }

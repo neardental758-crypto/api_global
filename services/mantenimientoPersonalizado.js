@@ -126,11 +126,14 @@ async function programarMantenimientosSemanalesSura() {
     const elegidas = candidatasConFecha.slice(0, cupoDisponible);
     console.log(`📝 [MANTENIMIENTO PERSONALIZADO] Cupo disponible: ${cupoDisponible}. Se seleccionaron ${elegidas.length} vehículos para programar.`);
     
+    const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'Servicio@bicyclecapital.co',
-        pass: 'fyam ecci wqby fhaj'
+        user: mailUser,
+        pass: mailPass
       }
     });
     
@@ -224,7 +227,7 @@ async function programarMantenimientosSemanalesSura() {
         if (emailUsuario && emailUsuario.trim() !== '') {
           try {
             const emailOptions = {
-              from: 'Servicio@bicyclecapital.co',
+              from: `"Bicycle Capital" <${mailUser}>`,
               to: emailUsuario,
               subject: subject,
               html: `<p>${message}</p>`
