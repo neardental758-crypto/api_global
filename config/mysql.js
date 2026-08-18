@@ -3,7 +3,7 @@ const { Sequelize } = require('sequelize');
 const database = process.env.MYSQL_DATABASE;
 const username = process.env.MYSQL_USER;
 const password = process.env.MYSQL_PASSWORD;
-const host = process.env.MYSQL_HOST;
+const host = process.env.MYSQL_HOST || 'localhost';
 
 const port = process.env.MYSQL_PORT || 3306;
 
@@ -15,24 +15,23 @@ const sequelize = new Sequelize(
         host,
         port,
         dialect: 'mysql',
-        logging: false, // Desactiva los logs masivos de "Executing (default): SELECT..." en Hostinger
+        logging: false, // Desactiva los logs masivos en consola
         define: {
-            timestamps: false, //la marca de tiempo en false para que no la tome en ningún modelo (createdAt, updatedAt)
-            freezeTableName: true, //congela el nombre de la tabla y no le agrega el plural
+            timestamps: false, // la marca de tiempo en false para que no la tome en ningún modelo (createdAt, updatedAt)
+            freezeTableName: true, // congela el nombre de la tabla y no le agrega el plural
         },
         dialectOptions: {
-            connectTimeout: 60000,
-            keepAliveInitialDelay: 10000,
-            enableKeepAlive: true
+            connectTimeout: 30000
         },
         pool: {
-            max: 5,             // Máximo de conexiones activas
-            min: 1,             // Mantener al menos 1 conexión abierta para no crear nuevas constantemente
-            acquire: 60000,     // Tiempo de espera para adquirir conexión
-            idle: 300000        // Mantener la conexión inactiva 5 minutos antes de cerrarla (evita agotar max_connections_per_hour)
+            max: 5,             // Máximo de conexiones simultáneas en el pool
+            min: 0,             // 0 para no forzar conexiones abiertas permanentes cuando no hay uso
+            acquire: 30000,     // Tiempo máximo de espera para obtener una conexión (30s)
+            idle: 10000,        // Cierra conexiones inactivas después de 10s para evitar que MySQL las mate por wait_timeout
+            evict: 10000        // Intervalo de limpieza de conexiones inactivas
         }
     }
-)
+);
 
 const dbConnectMysql = async () => {
     try {
