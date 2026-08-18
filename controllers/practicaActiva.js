@@ -187,12 +187,14 @@ const createItem = async (req, res) => {
                 
                 const fechaFormateada = currentSession.toISOString();
                 
+                const funcionarioDoc = body.practica_funcionario?.usu_documento || body.practica_funcionario?.idNumber || (typeof body.practica_funcionario === 'string' ? body.practica_funcionario : '');
+                
                 const newBody = {
                     ...body,
                     _id,
                     practica_fecha: fechaFormateada,
                     practica_hora_finalizar: horaFinalFormateada,
-                    practica_funcionario: body.practica_funcionario.idNumber,
+                    practica_funcionario: funcionarioDoc,
                     reagendada: reagendada || false
                 };
                 
@@ -289,11 +291,13 @@ const createMultipleItems = async (req, res) => {
                         const horaFinalFormateada = `${String(sessionEnd.getHours()).padStart(2, '0')}:${String(sessionEnd.getMinutes()).padStart(2, '0')}`;
                         const fechaFormateada = sessionStart.toISOString();
                         
+                        const funcionarioDoc = practica_funcionario?.usu_documento || practica_funcionario?.idNumber || (typeof practica_funcionario === 'string' ? practica_funcionario : '');
+                        
                         const newBody = {
                             _id,
                             practica_cupos,
                             practica_estacion,
-                            practica_funcionario: practica_funcionario.idNumber,
+                            practica_funcionario: funcionarioDoc,
                             practica_fecha: fechaFormateada,
                             practica_hora_finalizar: horaFinalFormateada,
                             practica_estado,
@@ -348,6 +352,7 @@ const getItemsByOrganization = async (req, res) => {
     const page = parseInt(filtro.page) || 0;
     const limit = parseInt(filtro.limit) || 20;
     const offset = page * limit;
+    const estacion = filtro.estacion || null;
     
     try {
         const empresa = await Empresa.findOne({
@@ -370,16 +375,22 @@ const getItemsByOrganization = async (req, res) => {
             return res.send({ data: [], total: 0 });
         }
         
-        const { count, rows } = await practicaActivaModels.findAndCountAll({
-            where: {
-                practica_cupos: {
-                    [Op.gt]: 0
-                },
-                practica_estado: 'ACTIVA',
-                practica_estacion: {
-                    [Op.in]: estacionesNames
-                }
+        const whereClause = {
+            practica_cupos: {
+                [Op.gt]: 0
             },
+            practica_estado: 'ACTIVA',
+            practica_estacion: {
+                [Op.in]: estacionesNames
+            }
+        };
+
+        if (estacion && estacion.trim() !== "" && estacion !== "ALL") {
+            whereClause.practica_estacion = estacion.trim();
+        }
+
+        const { count, rows } = await practicaActivaModels.findAndCountAll({
+            where: whereClause,
             include : [{
                 model : Usuario,
                 attributes : ['usu_documento', 'usu_nombre'],
