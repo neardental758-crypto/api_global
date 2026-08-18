@@ -126,78 +126,84 @@ const getNotificationUsersByOrganization = async (req, res) => {
       return res.status(404).json({ error: 'Empresa no encontrada' });
     }
     
-    const users = await TokenMsn.findAll({
+    const users = await Usuario.findAll({
+      where: { usu_empresa: empresa.emp_nombre },
+      attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_ciudad', 'usu_empresa', 'usu_dir_trabajo', 'usu_habilitado'],
       include: [{
-        model: Usuario,
-        where: { usu_empresa: empresa.emp_nombre },
-        attributes: ['usu_nombre', 'usu_ciudad', 'usu_empresa', 'usu_dir_trabajo', 'usu_habilitado'],
-        as: 'bc_usuario'
-      }],
-      attributes: ['documento', 'email', 'token']
+        model: TokenMsn,
+        attributes: ['token', 'email'],
+        as: 'token_info',
+        required: false
+      }]
     });
 
-    const userDocumentos = users.map(u => u.documento);
+    const userDocumentos = users.map(u => u.usu_documento).filter(Boolean);
 
-    const estadosPrestamoActivo = ['ACTIVA', 'PRESTAMO DE EMERGENCIA'];
-    
-    const prestamosActivos = await Prestamos.findAll({
-      where: {
-        pre_usuario: { [Op.in]: userDocumentos },
-        [Op.and]: [
-          { pre_estado: { [Op.ne]: null } },
-          {
-            [Op.or]: [
-              { pre_estado: { [Op.in]: estadosPrestamoActivo } },
-              {
-                pre_estado: {
-                  [Op.in]: estadosPrestamoActivo.map((e) => e.toLowerCase()),
+    let usuariosConPrestamos = new Set();
+    let usuariosConPrestamosPersonalizados = new Set();
+
+    if (userDocumentos.length > 0) {
+      const estadosPrestamoActivo = ['ACTIVA', 'PRESTAMO DE EMERGENCIA'];
+      
+      const prestamosActivos = await Prestamos.findAll({
+        where: {
+          pre_usuario: { [Op.in]: userDocumentos },
+          [Op.and]: [
+            { pre_estado: { [Op.ne]: null } },
+            {
+              [Op.or]: [
+                { pre_estado: { [Op.in]: estadosPrestamoActivo } },
+                {
+                  pre_estado: {
+                    [Op.in]: estadosPrestamoActivo.map((e) => e.toLowerCase()),
+                  },
                 },
-              },
-            ],
-          },
-        ],
-      },
-      attributes: ['pre_usuario'],
-      group: ['pre_usuario']
-    });
+              ],
+            },
+          ],
+        },
+        attributes: ['pre_usuario'],
+        group: ['pre_usuario']
+      });
 
-    const estadosPrestamoPersonalizado = ['PRESTAMO PERSONALIZADO'];
-    
-    const prestamosPersonalizados = await Prestamos.findAll({
-      where: {
-        pre_usuario: { [Op.in]: userDocumentos },
-        [Op.and]: [
-          { pre_estado: { [Op.ne]: null } },
-          {
-            [Op.or]: [
-              { pre_estado: { [Op.in]: estadosPrestamoPersonalizado } },
-              {
-                pre_estado: {
-                  [Op.in]: estadosPrestamoPersonalizado.map((e) => e.toLowerCase()),
+      const estadosPrestamoPersonalizado = ['PRESTAMO PERSONALIZADO'];
+      
+      const prestamosPersonalizados = await Prestamos.findAll({
+        where: {
+          pre_usuario: { [Op.in]: userDocumentos },
+          [Op.and]: [
+            { pre_estado: { [Op.ne]: null } },
+            {
+              [Op.or]: [
+                { pre_estado: { [Op.in]: estadosPrestamoPersonalizado } },
+                {
+                  pre_estado: {
+                    [Op.in]: estadosPrestamoPersonalizado.map((e) => e.toLowerCase()),
+                  },
                 },
-              },
-            ],
-          },
-        ],
-      },
-      attributes: ['pre_usuario'],
-      group: ['pre_usuario']
-    });
+              ],
+            },
+          ],
+        },
+        attributes: ['pre_usuario'],
+        group: ['pre_usuario']
+      });
 
-    const usuariosConPrestamos = new Set(prestamosActivos.map(p => p.pre_usuario));
-    const usuariosConPrestamosPersonalizados = new Set(prestamosPersonalizados.map(p => p.pre_usuario));
+      usuariosConPrestamos = new Set(prestamosActivos.map(p => p.pre_usuario));
+      usuariosConPrestamosPersonalizados = new Set(prestamosPersonalizados.map(p => p.pre_usuario));
+    }
 
     const formattedUsers = users.map(user => ({
-      documento: user.documento,
-      email: user.email,
-      token: user.token,
-      usu_nombre: user.bc_usuario ? user.bc_usuario.usu_nombre : '',
-      usu_ciudad: user.bc_usuario ? user.bc_usuario.usu_ciudad : '',
-      usu_empresa: user.bc_usuario ? user.bc_usuario.usu_empresa : '',
-      usu_estacion: user.bc_usuario ? user.bc_usuario.usu_dir_trabajo : '',
-      usu_habilitado: user.bc_usuario ? user.bc_usuario.usu_habilitado : null,
-      tiene_prestamos_activos: usuariosConPrestamos.has(user.documento),
-      tiene_prestamos_personalizados: usuariosConPrestamosPersonalizados.has(user.documento)
+      documento: user.usu_documento,
+      email: user.usu_email || (user.token_info ? user.token_info.email : ''),
+      token: user.token_info ? user.token_info.token : null,
+      usu_nombre: user.usu_nombre || '',
+      usu_ciudad: user.usu_ciudad || '',
+      usu_empresa: user.usu_empresa || '',
+      usu_estacion: user.usu_dir_trabajo || '',
+      usu_habilitado: user.usu_habilitado,
+      tiene_prestamos_activos: usuariosConPrestamos.has(user.usu_documento),
+      tiene_prestamos_personalizados: usuariosConPrestamosPersonalizados.has(user.usu_documento)
     }));
     
     res.json(formattedUsers);
@@ -244,25 +250,41 @@ const sendNotificationMessage = async (req, res) => {
         return res.status(404).json({ error: 'Empresa no encontrada' });
       }
       
-      targetUsers = await TokenMsn.findAll({
+      const dbUsers = await Usuario.findAll({
+        where: { usu_empresa: empresa.emp_nombre },
+        attributes: ['usu_documento', 'usu_nombre', 'usu_email'],
         include: [{
-          model: Usuario,
-          where: { usu_empresa: empresa.emp_nombre },
-          attributes: ['usu_nombre'],
-          as: 'bc_usuario'
-        }],
-        attributes: ['documento', 'email', 'token']
+          model: TokenMsn,
+          attributes: ['token', 'email'],
+          as: 'token_info',
+          required: false
+        }]
       });
+
+      targetUsers = dbUsers.map(u => ({
+        documento: u.usu_documento,
+        email: u.usu_email || (u.token_info ? u.token_info.email : ''),
+        token: u.token_info ? u.token_info.token : null,
+        bc_usuario: { usu_nombre: u.usu_nombre }
+      }));
     } else {
-      targetUsers = await TokenMsn.findAll({
-        where: { documento: { [Op.in]: users } },
+      const dbUsers = await Usuario.findAll({
+        where: { usu_documento: { [Op.in]: users } },
+        attributes: ['usu_documento', 'usu_nombre', 'usu_email'],
         include: [{
-          model: Usuario,
-          attributes: ['usu_nombre'],
-          as: 'bc_usuario'
-        }],
-        attributes: ['documento', 'email', 'token']
+          model: TokenMsn,
+          attributes: ['token', 'email'],
+          as: 'token_info',
+          required: false
+        }]
       });
+
+      targetUsers = dbUsers.map(u => ({
+        documento: u.usu_documento,
+        email: u.usu_email || (u.token_info ? u.token_info.email : ''),
+        token: u.token_info ? u.token_info.token : null,
+        bc_usuario: { usu_nombre: u.usu_nombre }
+      }));
     }
     
     
