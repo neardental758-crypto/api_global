@@ -725,7 +725,7 @@ const getItemsForReportsByOrganization = async (req, res) => {
           AND (
               pre_retiro_fecha IS NULL
               OR pre_devolucion_fecha IS NULL
-              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 900
+              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 300
           )
       )
   )
@@ -858,7 +858,7 @@ const getItemsForReportsByOrganization5g = async (req, res) => {
           AND (
               pre_retiro_fecha IS NULL
               OR pre_devolucion_fecha IS NULL
-              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 900
+              OR TIMESTAMPDIFF(SECOND, pre_retiro_fecha, pre_devolucion_fecha) >= 300
           )
       )
   )
