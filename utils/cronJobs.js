@@ -390,7 +390,7 @@ const verificarPrestamosVencidos = async () => {
     console.log(`🚲 [CRON] Se encontraron ${prestamosVencidos.length} préstamos vencidos. Enviando recordatorios...`);
 
     const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+    const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
@@ -576,7 +576,7 @@ const verificarNotificacionesProgramadas = async () => {
     console.log(`🚀 [CRON NOTIFICACIONES] Se encontraron ${matchingTasks.length} tareas programadas para ejecutar.`);
 
     const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+    const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',

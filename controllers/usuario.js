@@ -934,12 +934,12 @@ const getItems_cortezza = async (req, res) => {
 };
 
 // 🔹 controlador resetPassword
-const MAIL_USER = 'contacto@bicyclecapital.co'; // tu correo en .env
-const MAIL_PASS = 'cfgp eoer gfsk xsfm';
+const MAIL_USER = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
+const MAIL_PASS = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
 // 🔹 controlador resetPassword
-const MAIL_USER_MEB = 'experiencia@mejorenbici.com'; // tu correo en .env
-const MAIL_PASS_MEB = 'himq ialw wyvh mrdq';
+const MAIL_USER_MEB = process.env.MAIL_USER_MEB || 'experiencia@mejorenbici.com';
+const MAIL_PASS_MEB = process.env.MAIL_PASS_MEB || 'himq ialw wyvh mrdq';
 
 const enviarCorreoGenerico = async (email, password, fallbackApp = 'ride') => {
     try {

@@ -249,8 +249,8 @@ const sendApprovalEmail = async (req, res) => {
 
         if (usuario.bc_empresa.aplicacion === 'meb') {
             emailConfig = {
-                user: 'experiencia@mejorenbici.com',
-                pass: 'udtl ydrk pvyf oiev'
+                user: process.env.MAIL_USER_MEB || 'experiencia@mejorenbici.com',
+                pass: process.env.MAIL_PASS_MEB || 'himq ialw wyvh mrdq'
             };
             templateConfig = {
                 primaryColor: '#4CAF50',
@@ -263,7 +263,7 @@ const sendApprovalEmail = async (req, res) => {
         } else if (usuario.bc_empresa.aplicacion === 'ride') {
             emailConfig = {
                 user: process.env.MAIL_USER || 'contacto@bicyclecapital.co',
-                pass: process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm'
+                pass: process.env.MAIL_PASS || 'xkot vuaz rjua tvqk'
             };
             templateConfig = {
                 primaryColor: '#FFD700',

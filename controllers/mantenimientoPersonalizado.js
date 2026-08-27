@@ -349,7 +349,7 @@ const enviarRecordatorioManual = async (req, res) => {
     if (emailUsuario && emailUsuario.trim() !== '') {
       try {
         const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-        const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+        const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
         const transporter = nodemailer.createTransport({
           service: 'gmail',
@@ -504,7 +504,7 @@ const forzarMantenimiento = async (req, res) => {
     if (emailUsuario && emailUsuario.trim() !== '') {
       try {
         const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-        const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+        const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
         const transporter = nodemailer.createTransport({
           service: 'gmail',
@@ -733,7 +733,7 @@ const cancelarYReemplazarMantenimiento = async (req, res) => {
         if (emailUsuario && emailUsuario.trim() !== '') {
           try {
             const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-            const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+            const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
             const transporter = nodemailer.createTransport({
               service: 'gmail',

@@ -127,7 +127,7 @@ async function programarMantenimientosSemanalesSura() {
     console.log(`📝 [MANTENIMIENTO PERSONALIZADO] Cupo disponible: ${cupoDisponible}. Se seleccionaron ${elegidas.length} vehículos para programar.`);
     
     const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+    const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',

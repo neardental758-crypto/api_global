@@ -58,8 +58,8 @@ const enviarCertificadoMovilidad = async ({
             };
         } else {
             emailConfig = {
-                user: 'contacto@bicyclecapital.co',
-                pass: 'cfgp eoer gfsk xsfm'
+                user: process.env.MAIL_USER || 'contacto@bicyclecapital.co',
+                pass: process.env.MAIL_PASS || 'xkot vuaz rjua tvqk'
             };
             templateConfig = {
                 primaryColor: '#D32F2F',

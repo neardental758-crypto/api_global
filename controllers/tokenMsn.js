@@ -299,7 +299,7 @@ const sendNotificationMessage = async (req, res) => {
     const pushResults = [];
     
     const mailUser = process.env.MAIL_USER || 'contacto@bicyclecapital.co';
-    const mailPass = process.env.MAIL_PASS || 'cfgp eoer gfsk xsfm';
+    const mailPass = process.env.MAIL_PASS || 'xkot vuaz rjua tvqk';
 
     const transporter = nodemailer.createTransport({
       service: 'gmail',
