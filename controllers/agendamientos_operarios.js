@@ -2,6 +2,7 @@ const { agendamientoOperarioModels, usuarioModels, estacionModels, empresaModels
 const { Op } = require("sequelize");
 const { httpError } = require("../utils/handleError");
 const { sequelize } = require('../config/mysql');
+const { generarCuposParaAgendamiento, eliminarOSincronizarCupos } = require('../services/practicaGenerator');
 const getOperarios = async (req, res) => {
   try {
     const operarios = await usuarioModels.findAll({
@@ -231,7 +232,17 @@ const marcarTodosRevisados = async (req, res) => {
 
 const createAgendamiento = async (req, res) => {
   try {
-    const { operario_id, estacion_id, empresa_id, dias_semana, notas } = req.body;
+    const {
+      operario_id,
+      estacion_id,
+      empresa_id,
+      dias_semana,
+      hora_inicio,
+      hora_fin,
+      cupos_por_turno,
+      crear_cupos_practica,
+      notas
+    } = req.body;
 
     if (!dias_semana || !Array.isArray(dias_semana) || dias_semana.length === 0) {
       return httpError(res, "ERROR_DIAS_REQUERIDOS");
@@ -247,11 +258,24 @@ const createAgendamiento = async (req, res) => {
       estacion_id,
       empresa_id,
       dias_semana: diasString,
+      hora_inicio: hora_inicio || null,
+      hora_fin: hora_fin || null,
+      cupos_por_turno: cupos_por_turno ? parseInt(cupos_por_turno) : 1,
+      crear_cupos_practica: crear_cupos_practica !== undefined ? !!crear_cupos_practica : true,
       notas,
       estado: 'pendiente',
       activo: true,
       fecha_creacion: fechaCreacion
     });
+
+    // Generar automáticamente los cupos de prueba práctica si está habilitado
+    if (agendamiento.crear_cupos_practica && agendamiento.hora_inicio && agendamiento.hora_fin) {
+      try {
+        await generarCuposParaAgendamiento(agendamiento.toJSON());
+      } catch (errGen) {
+        console.error('Error generando cupos automáticos tras crear agendamiento:', errGen);
+      }
+    }
 
     res.send(agendamiento);
   } catch (error) {
@@ -263,27 +287,54 @@ const createAgendamiento = async (req, res) => {
 const updateAgendamiento = async (req, res) => {
   try {
     const { id } = req.params;
-    const { operario_id, estacion_id, empresa_id, dias_semana, notas, estado, activo } = req.body;
+    const {
+      operario_id,
+      estacion_id,
+      empresa_id,
+      dias_semana,
+      hora_inicio,
+      hora_fin,
+      cupos_por_turno,
+      crear_cupos_practica,
+      notas,
+      estado,
+      activo
+    } = req.body;
 
     let diasString = dias_semana;
     if (Array.isArray(dias_semana)) {
       diasString = dias_semana.join(',');
     }
 
+    const updateData = { 
+      operario_id, 
+      estacion_id, 
+      empresa_id, 
+      dias_semana: diasString,
+      notas, 
+      estado,
+      activo
+    };
+
+    if (hora_inicio !== undefined) updateData.hora_inicio = hora_inicio;
+    if (hora_fin !== undefined) updateData.hora_fin = hora_fin;
+    if (cupos_por_turno !== undefined) updateData.cupos_por_turno = parseInt(cupos_por_turno);
+    if (crear_cupos_practica !== undefined) updateData.crear_cupos_practica = !!crear_cupos_practica;
+
     await agendamientoOperarioModels.update(
-      { 
-        operario_id, 
-        estacion_id, 
-        empresa_id, 
-        dias_semana: diasString,
-        notas, 
-        estado,
-        activo
-      },
+      updateData,
       { where: { id } }
     );
 
     const agendamiento = await agendamientoOperarioModels.findByPk(id);
+
+    // Sincronizar / regenerar los cupos automáticamente
+    try {
+      await eliminarOSincronizarCupos(id, agendamiento ? agendamiento.toJSON() : null);
+    } catch (errSync) {
+      console.error('Error sincronizando cupos tras actualizar agendamiento:', errSync);
+    }
+
     res.send(agendamiento);
   } catch (error) {
     console.error(error);
@@ -294,6 +345,14 @@ const updateAgendamiento = async (req, res) => {
 const deleteAgendamiento = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Eliminar los cupos futuros asociados que no hayan sido reservados
+    try {
+      await eliminarOSincronizarCupos(id, null);
+    } catch (errDel) {
+      console.error('Error eliminando cupos asociados al agendamiento:', errDel);
+    }
+
     await agendamientoOperarioModels.destroy({ where: { id } });
     res.send({ message: 'Agendamiento eliminado' });
   } catch (error) {

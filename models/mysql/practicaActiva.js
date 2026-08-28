@@ -30,6 +30,10 @@ const PracticaActiva = sequelize.define(
             type: DataTypes.BOOLEAN,
             defaultValue: false,
         },
+        agendamiento_id: {
+            type: DataTypes.INTEGER,
+            allowNull: true,
+        },
     }
 );
 

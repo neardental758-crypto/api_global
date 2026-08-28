@@ -29,6 +29,22 @@ const AgendamientoOperario = sequelize.define(
       type: DataTypes.STRING,
       allowNull: false
     },
+    hora_inicio: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    hora_fin: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    cupos_por_turno: {
+      type: DataTypes.INTEGER,
+      defaultValue: 1
+    },
+    crear_cupos_practica: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
+    },
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
