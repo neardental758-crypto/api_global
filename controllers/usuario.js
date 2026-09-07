@@ -673,53 +673,77 @@ const getUsersByOrganization = async (req, res) => {
             params = req.query;
         }
 
+        const targetEmpresa = params.empresa || params.emp_nombre || emp_nombre;
         const page = parseInt(params.page) || 1;
         const limit = parseInt(params.limit) || 20;
         const search = params.search || "";
-        const filterEstado = params.filterEstado || "";
+        const filterEstado = params.filterEstado !== undefined ? String(params.filterEstado) : "";
         const filterFechaDesde = params.filterFechaDesde || "";
         const filterFechaHasta = params.filterFechaHasta || "";
         const filterEstacion = params.filterEstacion || "";
         const roleId = params.roleId || "";
         const sortColumn = params.sortColumn || "";
         const sortDirection = params.sortDirection || "asc";
+        const isExport = params.export === 'true' || params.export === true || params.isExport === 'true' || params.isExport === true;
 
         const offset = (page - 1) * limit;
 
-        let whereClause = { usu_empresa: emp_nombre };
+        const andConditions = [];
+
+        if (targetEmpresa && targetEmpresa.toLowerCase() !== 'all' && targetEmpresa.toLowerCase() !== 'todas') {
+            andConditions.push({ usu_empresa: targetEmpresa });
+        }
 
         if (search) {
-            whereClause = {
-                ...whereClause,
+            andConditions.push({
                 [Op.or]: [
                     { usu_nombre: { [Op.like]: `%${search}%` } },
-                    { usu_documento: { [Op.like]: `%${search}%` } }
+                    { usu_documento: { [Op.like]: `%${search}%` } },
+                    { usu_email: { [Op.like]: `%${search}%` } }
                 ]
-            };
+            });
         }
 
         if (filterEstado !== "") {
-            whereClause.usu_habilitado = parseInt(filterEstado);
+            const estadoNum = parseInt(filterEstado);
+            if (estadoNum === 0) {
+                andConditions.push({
+                    [Op.or]: [
+                        { usu_habilitado: 0 },
+                        { usu_habilitado: null }
+                    ]
+                });
+            } else if (!isNaN(estadoNum)) {
+                andConditions.push({ usu_habilitado: estadoNum });
+            }
         }
 
         if (filterFechaDesde && filterFechaHasta) {
             const fechaInicio = new Date(filterFechaDesde + 'T00:00:00');
             const fechaFin = new Date(filterFechaHasta + 'T23:59:59');
 
-            whereClause.usu_created_at = {
-                [Op.between]: [fechaInicio, fechaFin]
-            };
+            andConditions.push({
+                usu_created_at: {
+                    [Op.between]: [fechaInicio, fechaFin]
+                }
+            });
         } else if (filterFechaDesde) {
             const fechaInicio = new Date(filterFechaDesde + 'T00:00:00');
-            whereClause.usu_created_at = {
-                [Op.gte]: fechaInicio
-            };
+            andConditions.push({
+                usu_created_at: {
+                    [Op.gte]: fechaInicio
+                }
+            });
         } else if (filterFechaHasta) {
             const fechaFin = new Date(filterFechaHasta + 'T23:59:59');
-            whereClause.usu_created_at = {
-                [Op.lte]: fechaFin
-            };
+            andConditions.push({
+                usu_created_at: {
+                    [Op.lte]: fechaFin
+                }
+            });
         }
+
+        let whereClause = andConditions.length > 0 ? { [Op.and]: andConditions } : {};
 
         let includeClause = [
             {
@@ -768,6 +792,22 @@ const getUsersByOrganization = async (req, res) => {
             }
         }
 
+        if (isExport) {
+            const exportRows = await usuarioModels.findAll({
+                where: whereClause,
+                include: includeClause,
+                order: orderClause,
+                limit: 50000,
+                subQuery: false
+            });
+
+            return res.send({
+                success: true,
+                data: exportRows,
+                total: exportRows.length
+            });
+        }
+
         const countPromise = usuarioModels.count({
             where: whereClause,
             include: includeClause.map(inc => ({ ...inc, attributes: [] })),
@@ -785,11 +825,19 @@ const getUsersByOrganization = async (req, res) => {
 
         const [count, rows] = await Promise.all([countPromise, rowsPromise]);
 
+        const estacionesWhere = (targetEmpresa && targetEmpresa.toLowerCase() !== 'all' && targetEmpresa.toLowerCase() !== 'todas')
+            ? { est_empresa: targetEmpresa }
+            : {};
 
         const allEstaciones = await Estacion.findAll({
             attributes: ['est_estacion'],
-            where: { est_empresa: emp_nombre },
+            where: estacionesWhere,
             group: ['est_estacion']
+        });
+
+        const allEmpresas = await Empresa.findAll({
+            attributes: ['emp_id', 'emp_nombre'],
+            order: [['emp_nombre', 'ASC']]
         });
 
         res.send({
@@ -798,7 +846,8 @@ const getUsersByOrganization = async (req, res) => {
             page: page,
             limit: limit,
             totalPages: Math.ceil(count / limit),
-            estaciones: allEstaciones.map(e => e.est_estacion),
+            estaciones: allEstaciones.map(e => e.est_estacion).filter(Boolean),
+            empresas: allEmpresas.map(e => e.emp_nombre).filter(Boolean),
             user
         });
     } catch (error) {
