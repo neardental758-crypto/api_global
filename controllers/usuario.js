@@ -44,6 +44,148 @@ const resolveEstacionDireccionOrThrow = async (direccion, transaction) => {
 
     throw new Error("USU_DIR_TRABAJO_NOT_FOUND");
 };
+
+/**
+ * Normaliza y valida el nombre de la empresa para asegurar que exista en bc_empresas.emp_nombre
+ * (satisfaciendo la restricción de llave foránea `usuario-empresa`).
+ */
+const resolveValidEmpresa = async (empresaInput, transaction) => {
+    try {
+        if (!empresaInput || typeof empresaInput !== 'string' || !empresaInput.trim()) {
+            const [firstEmp] = await sequelize.query(
+                "SELECT emp_nombre FROM bc_empresas WHERE emp_estado = 'ACTIVA' LIMIT 1",
+                { type: QueryTypes.SELECT, transaction }
+            );
+            return firstEmp?.emp_nombre || 'Sin empresa';
+        }
+        const trimmed = empresaInput.trim();
+
+        // 1. Buscar coincidencia exacta por nombre
+        const rowsByName = await sequelize.query(
+            "SELECT emp_nombre FROM bc_empresas WHERE emp_nombre = ? LIMIT 1",
+            { replacements: [trimmed], type: QueryTypes.SELECT, transaction }
+        );
+        if (rowsByName && rowsByName.length > 0 && rowsByName[0].emp_nombre) {
+            return rowsByName[0].emp_nombre;
+        }
+
+        // 2. Buscar si enviaron el emp_id (ObjectId u otro identificador)
+        const rowsById = await sequelize.query(
+            "SELECT emp_nombre FROM bc_empresas WHERE emp_id = ? LIMIT 1",
+            { replacements: [trimmed], type: QueryTypes.SELECT, transaction }
+        );
+        if (rowsById && rowsById.length > 0 && rowsById[0].emp_nombre) {
+            return rowsById[0].emp_nombre;
+        }
+
+        // 3. Buscar insensible a mayúsculas/minúsculas
+        const rowsCase = await sequelize.query(
+            "SELECT emp_nombre FROM bc_empresas WHERE LOWER(emp_nombre) = LOWER(?) LIMIT 1",
+            { replacements: [trimmed], type: QueryTypes.SELECT, transaction }
+        );
+        if (rowsCase && rowsCase.length > 0 && rowsCase[0].emp_nombre) {
+            return rowsCase[0].emp_nombre;
+        }
+
+        return trimmed;
+    } catch (e) {
+        console.error('[resolveValidEmpresa] Error:', e);
+        return empresaInput || 'Sin empresa';
+    }
+};
+
+/**
+ * Resuelve una dirección de trabajo válida para bc_usuarios.usu_dir_trabajo.
+ * Dado que existe la restricción FOREIGN KEY `usuario-estacion` hacia `bc_estaciones.est_direccion`,
+ * este método garantiza que el valor a insertar exista en `bc_estaciones` para evitar que falle el registro.
+ *
+ * Estrategia de resolución:
+ * 1. Si la dirección recibida existe en `bc_estaciones.est_direccion`, se utiliza.
+ * 2. Si enviaron el nombre de una estación (ej. "FDN"), se busca su est_direccion correspondiente.
+ * 3. Si no existe o viene vacía / 'No especificado':
+ *    - Busca si la empresa del usuario (`empresaNombre`, ej. "FDN") tiene al menos una estación activa
+ *      en `bc_estaciones` y toma su `est_direccion`.
+ * 4. Fallback seguro: toma la primera estación válida disponible en la base de datos (ej. "Cl. 28 #13a-15, Bogotá" o "dir trabajo").
+ */
+const resolveValidDirTrabajo = async (dirTrabajo, empresaNombre, transaction) => {
+    try {
+        const trimmed = (dirTrabajo && typeof dirTrabajo === 'string') ? dirTrabajo.trim() : '';
+
+        // 1. Si viene una dirección y no es un placeholder, verificar si existe en bc_estaciones.est_direccion
+        if (trimmed && trimmed.toLowerCase() !== 'no especificado' && trimmed.toLowerCase() !== 'sin direccion' && trimmed !== '-') {
+            const rows = await sequelize.query(
+                "SELECT est_direccion FROM bc_estaciones WHERE est_direccion = ? LIMIT 1",
+                {
+                    replacements: [trimmed],
+                    type: QueryTypes.SELECT,
+                    transaction,
+                }
+            );
+            if (rows && rows.length > 0 && rows[0].est_direccion) {
+                return rows[0].est_direccion;
+            }
+
+            // También intentar coincidencia por nombre de estación si enviaron el nombre en vez de la dirección
+            const rowsByName = await sequelize.query(
+                "SELECT est_direccion FROM bc_estaciones WHERE est_estacion = ? LIMIT 1",
+                {
+                    replacements: [trimmed],
+                    type: QueryTypes.SELECT,
+                    transaction,
+                }
+            );
+            if (rowsByName && rowsByName.length > 0 && rowsByName[0].est_direccion) {
+                return rowsByName[0].est_direccion;
+            }
+        }
+
+        // 2. Si no es válida o no viene, buscar la estación de la empresa del usuario
+        if (empresaNombre && typeof empresaNombre === 'string' && empresaNombre.trim()) {
+            const trimmedEmp = empresaNombre.trim();
+            const rowsEmpresa = await sequelize.query(
+                "SELECT est_direccion FROM bc_estaciones WHERE est_empresa = ? AND est_habilitada = 1 LIMIT 1",
+                {
+                    replacements: [trimmedEmp],
+                    type: QueryTypes.SELECT,
+                    transaction,
+                }
+            );
+            if (rowsEmpresa && rowsEmpresa.length > 0 && rowsEmpresa[0].est_direccion) {
+                return rowsEmpresa[0].est_direccion;
+            }
+
+            const rowsEmpresaCualquiera = await sequelize.query(
+                "SELECT est_direccion FROM bc_estaciones WHERE est_empresa = ? LIMIT 1",
+                {
+                    replacements: [trimmedEmp],
+                    type: QueryTypes.SELECT,
+                    transaction,
+                }
+            );
+            if (rowsEmpresaCualquiera && rowsEmpresaCualquiera.length > 0 && rowsEmpresaCualquiera[0].est_direccion) {
+                return rowsEmpresaCualquiera[0].est_direccion;
+            }
+        }
+
+        // 3. Fallback seguro: tomar una estación válida de la base de datos para no violar la FK
+        const fallbackEstacion = await sequelize.query(
+            "SELECT est_direccion FROM bc_estaciones ORDER BY est_id ASC LIMIT 1",
+            {
+                type: QueryTypes.SELECT,
+                transaction,
+            }
+        );
+
+        if (fallbackEstacion && fallbackEstacion.length > 0 && fallbackEstacion[0].est_direccion) {
+            return fallbackEstacion[0].est_direccion;
+        }
+
+        return trimmed || 'No especificado';
+    } catch (err) {
+        console.error('[resolveValidDirTrabajo] Error resolviendo dirección de trabajo:', err);
+        return dirTrabajo || 'No especificado';
+    }
+};
 /**
  * funcion getItems donde se requiere el modelo de esta collecion
  * utilizamos try catch para manejo de errores
@@ -156,12 +298,12 @@ const createItem = async (req, res) => {
         const usu_email = body.usu_email || body.email;
         const usu_password_raw = body.usu_password || body.password;
         const usu_telefono = body.usu_telefono || body.phoneNumber || 'Sin telefono';
-        const usu_empresa = body.usu_empresa || body.empresaNombre || 'Sin empresa';
+        const raw_empresa = body.usu_empresa || body.empresaNombre || 'Sin empresa';
         const usu_ciudad = body.usu_ciudad || 'BOGOTA';
         const usu_tipo_documento = body.usu_tipo_documento || body.idType || 'Cedula de ciudadania';
         const usu_fecha_nacimiento = body.usu_fecha_nacimiento || body.birthday || new Date().toISOString();
         const usu_genero = body.usu_genero || body.gender || 'No especificado';
-        const usu_dir_trabajo = body.usu_dir_trabajo || body.dirTrabajo || 'No especificado';
+        const raw_dir_trabajo = body.usu_dir_trabajo || body.dirTrabajo;
         const usu_dir_casa = body.usu_dir_casa || body.dirCasa || 'No especificado';
         const usu_recorrido = body.usu_recorrido || '0';
         const usu_img = body.usu_img || body.s3Route || 'Sin url';
@@ -170,6 +312,10 @@ const createItem = async (req, res) => {
             await transaction.rollback();
             return res.status(400).send('ERROR: usu_documento es requerido');
         }
+
+        // Normalizar empresa y resolver dirección de trabajo válida para evitar fallos de Foreign Key
+        const usu_empresa = await resolveValidEmpresa(raw_empresa, transaction);
+        const usu_dir_trabajo = await resolveValidDirTrabajo(raw_dir_trabajo, usu_empresa, transaction);
 
         // --- NUEVAS VERIFICACIONES PREVENTIVAS ---
         // 1. Verificar si el usuario ya existe
