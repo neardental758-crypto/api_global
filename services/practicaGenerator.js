@@ -107,8 +107,8 @@ async function generarCuposParaAgendamiento(agendamiento, semanasAdelante = 4) {
           const month = fechaIteracion.getMonth();
           const day = fechaIteracion.getDate();
 
-          // La fecha se almacena en UTC o ISO string
-          const slotStartDate = new Date(Date.UTC(year, month, day, slotStartH + 5, slotStartM, 0, 0));
+          // La fecha se almacena en formato ISO con la hora nominal local
+          const slotStartDate = new Date(Date.UTC(year, month, day, slotStartH, slotStartM, 0, 0));
           const fechaISO = slotStartDate.toISOString();
 
           // Verificar si ya existe un slot idéntico
@@ -161,7 +161,15 @@ async function eliminarOSincronizarCupos(agendamientoId, nuevosDatos = null) {
     if (!agendamientoId) return { success: false, message: 'ID de agendamiento requerido' };
 
     const ahoraUTC = new Date();
-    const fechaActualISO = ahoraUTC.toISOString();
+    const ahoraColombia = new Date(ahoraUTC.getTime() - (5 * 60 * 60 * 1000));
+    const fechaActualISO = new Date(Date.UTC(
+      ahoraColombia.getFullYear(),
+      ahoraColombia.getMonth(),
+      ahoraColombia.getDate(),
+      ahoraColombia.getHours(),
+      ahoraColombia.getMinutes(),
+      0, 0
+    )).toISOString();
 
     // Eliminar slots futuros que pertenezcan a este agendamiento_id
     await practicaActivaModels.destroy({
