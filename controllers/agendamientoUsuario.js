@@ -120,7 +120,7 @@ const createItem = async (req, res) => {
 const patchItem = async (req, res) => {
     const transaction = await agendamientoUsuariosModels.sequelize.transaction();
     try {
-        const objetoACambiar = req.body;
+        const { condiciones_esperadas, ...objetoACambiar } = req.body;
         const _id = req.params._id;
 
         if (!_id) {
@@ -128,10 +128,25 @@ const patchItem = async (req, res) => {
             return res.status(400).send('ID requerido');
         }
 
-        const agendado = await agendamientoUsuariosModels.findByPk(_id, { transaction });
+        const agendado = await agendamientoUsuariosModels.findByPk(_id, {
+            transaction,
+            lock: transaction.LOCK.UPDATE,
+        });
         if (!agendado) {
             await transaction.rollback();
             return res.status(404).send('No se encontró el registro para actualizar');
+        }
+
+        if (condiciones_esperadas) {
+            const campos = ['agendado_estado', 'agendado_fecha', 'agendado_estacion'];
+            const cambioConcurrente = campos.some(campo =>
+                condiciones_esperadas[campo] !== undefined &&
+                String(agendado[campo] ?? '') !== String(condiciones_esperadas[campo] ?? '')
+            );
+            if (cambioConcurrente) {
+                await transaction.rollback();
+                return res.status(409).send('La cita fue modificada o gestionada por otra persona');
+            }
         }
 
         await agendado.update(objetoACambiar, { transaction });
