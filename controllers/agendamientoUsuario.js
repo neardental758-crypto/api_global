@@ -118,58 +118,58 @@ const createItem = async (req, res) => {
 
 
 const patchItem = async (req, res) => {
+    const transaction = await agendamientoUsuariosModels.sequelize.transaction();
     try {
-
         const objetoACambiar = req.body;
         const _id = req.params._id;
 
         if (!_id) {
+            await transaction.rollback();
             return res.status(400).send('ID requerido');
         }
 
-        const data = await agendamientoUsuariosModels.update(
-            objetoACambiar,
-            {
-                where: {
-                    _id: _id
-                }
-            }
-        );
-
-        if (data[0] === 0) {
+        const agendado = await agendamientoUsuariosModels.findByPk(_id, { transaction });
+        if (!agendado) {
+            await transaction.rollback();
             return res.status(404).send('No se encontró el registro para actualizar');
         }
 
-        try {
-            const agendado = await agendamientoUsuariosModels.findOne({
-                where: { _id },
+        await agendado.update(objetoACambiar, { transaction });
+
+        const cedula = agendado.agendado_cedula ? String(agendado.agendado_cedula) : null;
+        const agendadoResultado = agendado.agendado_resultado ? String(agendado.agendado_resultado).toUpperCase() : null;
+
+        if (cedula && agendadoResultado === 'APROBADO') {
+            const teorica = await teoricaModels.findOne({
+                where: {
+                    teorica_usuario: cedula,
+                    teorica_resultado: 'APROBO',
+                },
+                order: [['teorica_fecha', 'DESC']],
+                transaction,
             });
 
-            const cedula = agendado && agendado.agendado_cedula ? String(agendado.agendado_cedula) : null;
-            const agendadoResultado = agendado && agendado.agendado_resultado ? String(agendado.agendado_resultado) : null;
-
-            if (cedula && agendadoResultado === 'APROBADO') {
-                const teorica = await teoricaModels.findOne({
-                    where: {
-                        teorica_usuario: cedula,
-                        teorica_resultado: 'APROBO',
-                    },
-                    order: [['teorica_fecha', 'DESC']],
-                });
-
-                if (teorica) {
-                    await usuarioModels.update(
-                        { usu_habilitado: 1 },
-                        { where: { usu_documento: cedula } }
-                    );
-                }
+            if (!teorica) {
+                await transaction.rollback();
+                return res.status(409).send('El usuario no tiene aprobada la evaluación teórica');
             }
-        } catch (extraError) {
-            console.error('Error habilitando usuario tras aprobar práctica:', extraError);
+
+            const usuario = await usuarioModels.findByPk(cedula, { transaction });
+            if (!usuario) {
+                await transaction.rollback();
+                return res.status(404).send('No se encontró el usuario asociado al test drive');
+            }
+
+            await usuario.update({ usu_habilitado: 1 }, { transaction });
         }
 
-        res.send('ok');
+        await transaction.commit();
+        res.send({
+            data: agendado,
+            usuario_habilitado: agendadoResultado === 'APROBADO',
+        });
     } catch (error) {
+        if (!transaction.finished) await transaction.rollback();
         console.error('Error en patchItem:', error);
         httpError(res, "ERROR_AGENDAMIENTO_ACTIVO");
     }
