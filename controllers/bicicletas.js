@@ -376,11 +376,12 @@ const updateEstadoDash = async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Error al actualizar estado desde dashboard:', error);
+        const sqlMsg = error.original?.sqlMessage || error.parent?.sqlMessage || error.message;
+        console.error('Error al actualizar estado desde dashboard:', sqlMsg, error);
         res.status(500).json({
             success: false,
             message: 'Error al actualizar estado',
-            error: error.message
+            error: sqlMsg
         });
     }
 };

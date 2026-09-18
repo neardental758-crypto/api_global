@@ -20,11 +20,17 @@ async function reagendarCitas() {
     }
 
     // 2. Reagendado semanal de citas independientes
+    const hace7Dias = moment().subtract(7, 'days').format('YYYY-MM-DD');
+    const { Op } = require('sequelize');
+
     const citasReagendadas = await practicaActivaModels.findAll({
       where: {
         practica_estado: 'ACTIVA',
         reagendada: true,
-        agendamiento_id: null
+        agendamiento_id: null,
+        practica_fecha: {
+          [Op.gte]: hace7Dias
+        }
       },
     });
 
@@ -43,6 +49,9 @@ async function reagendarCitas() {
       delete nuevaPractica.id;
       
       await practicaActivaModels.create(nuevaPractica);
+
+      // Desactivar reagendado en la cita original para evitar duplicaciones infinitas
+      await cita.update({ reagendada: false });
     }
 
   } catch (error) {
