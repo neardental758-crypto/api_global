@@ -165,6 +165,8 @@ if (MOTORDB === 'mysql') {
         reportesContradiccionesModels: require('./mysql/reportesContradicciones'),
         historialNotificacionesModels: require('./mysql/historialNotificaciones'),
         notificacionesProgramadasModels: require('./mysql/notificacionesProgramadas'),
+        whatsappTicketsModels: require('./mysql/whatsapp_tickets'),
+        whatsappChatMessagesModels: require('./mysql/whatsapp_chat_messages'),
     };
 
     Prestamos.belongsTo(Usuario, { foreignKey: "pre_usuario" });
