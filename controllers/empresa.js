@@ -49,6 +49,18 @@ const getItemFilterOrganitationFromStation = async (req, res) => {
         attributes: ['est_estacion', 'est_direccion', 'est_latitud', 'est_longitud'],
       }]
     });
+
+    if (data.length > 0 && (
+      emp_id === '6849f537c1ba10446a19fa4f' ||
+      emp_id === 'emp-bc' ||
+      (data[0].emp_nombre && data[0].emp_nombre.toLowerCase().includes('bicycle'))
+    )) {
+      const allStations = await Estacion.findAll({
+        attributes: ['est_estacion', 'est_direccion', 'est_latitud', 'est_longitud']
+      });
+      data[0].setDataValue('bc_estaciones', allStations);
+    }
+
     res.send({ data });
   } catch (e) {
     httpError(res, `ERROR_GET_EMPRESA`)

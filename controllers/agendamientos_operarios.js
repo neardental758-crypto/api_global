@@ -1,4 +1,4 @@
-const { agendamientoOperarioModels, usuarioModels, estacionModels, empresaModels, mantenimientoModels, UsuarioEmpresas, agendamientoIncumplidoModels} = require("../models");
+const { agendamientoOperarioModels, usuarioModels, estacionModels, empresaModels, mantenimientoModels, UsuarioEmpresas, agendamientoIncumplidoModels, practicaActivaModels } = require("../models");
 const { Op } = require("sequelize");
 const { httpError } = require("../utils/handleError");
 const { sequelize } = require('../config/mysql');
@@ -81,11 +81,32 @@ const getAgendamientos = async (req, res) => {
       distinct: true
     });
 
+    const agendamientoIds = rows.map(r => r.id);
+    const cuposMap = {};
+    if (agendamientoIds.length > 0) {
+      const cuposCounts = await practicaActivaModels.findAll({
+        attributes: [
+          'agendamiento_id',
+          [sequelize.fn('COUNT', sequelize.col('_id')), 'total_cupos']
+        ],
+        where: {
+          agendamiento_id: { [Op.in]: agendamientoIds },
+          practica_estado: 'ACTIVA'
+        },
+        group: ['agendamiento_id'],
+        raw: true
+      });
+      cuposCounts.forEach(c => {
+        cuposMap[c.agendamiento_id] = parseInt(c.total_cupos, 10);
+      });
+    }
+
     let dataFormatted = rows.map(ag => ({
       ...ag.dataValues,
       operario_nombre: ag.bc_usuario?.usu_nombre || 'N/A',
       estacion_nombre: ag.bc_estacione?.est_estacion || 'N/A',
-      empresa_nombre: ag.bc_estacione?.bc_empresa?.emp_nombre || 'N/A'
+      empresa_nombre: ag.bc_estacione?.bc_empresa?.emp_nombre || 'N/A',
+      total_cupos: cuposMap[ag.id] || 0
     }));
 
     if (filters.search) {
@@ -269,15 +290,19 @@ const createAgendamiento = async (req, res) => {
     });
 
     // Generar automáticamente los cupos de prueba práctica si está habilitado
+    let cuposGenerados = 0;
     if (agendamiento.crear_cupos_practica && agendamiento.hora_inicio && agendamiento.hora_fin) {
       try {
-        await generarCuposParaAgendamiento(agendamiento.toJSON());
+        const genRes = await generarCuposParaAgendamiento(agendamiento.toJSON());
+        cuposGenerados = genRes?.count || 0;
       } catch (errGen) {
         console.error('Error generando cupos automáticos tras crear agendamiento:', errGen);
       }
     }
 
-    res.send(agendamiento);
+    const resData = agendamiento.toJSON();
+    resData.cupos_generados = cuposGenerados;
+    res.send(resData);
   } catch (error) {
     console.error(error);
     httpError(res, "ERROR_CREATE_AGENDAMIENTO");
@@ -329,13 +354,17 @@ const updateAgendamiento = async (req, res) => {
     const agendamiento = await agendamientoOperarioModels.findByPk(id);
 
     // Sincronizar / regenerar los cupos automáticamente
+    let cuposGenerados = 0;
     try {
-      await eliminarOSincronizarCupos(id, agendamiento ? agendamiento.toJSON() : null);
+      const syncRes = await eliminarOSincronizarCupos(id, agendamiento ? agendamiento.toJSON() : null);
+      cuposGenerados = syncRes?.count || 0;
     } catch (errSync) {
       console.error('Error sincronizando cupos tras actualizar agendamiento:', errSync);
     }
 
-    res.send(agendamiento);
+    const resData = agendamiento ? agendamiento.toJSON() : {};
+    resData.cupos_generados = cuposGenerados;
+    res.send(resData);
   } catch (error) {
     console.error(error);
     httpError(res, "ERROR_UPDATE_AGENDAMIENTO");
@@ -425,6 +454,35 @@ const getEstacionesEmpresa = async (req, res) => {
   }
 };
 
+const getCuposAgendamiento = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const cupos = await practicaActivaModels.findAll({
+      where: { agendamiento_id: id },
+      order: [['practica_fecha', 'ASC']]
+    });
+    res.send({ data: cupos, total: cupos.length });
+  } catch (error) {
+    console.error('Error getCuposAgendamiento:', error);
+    httpError(res, "ERROR_GET_CUPOS_AGENDAMIENTO");
+  }
+};
+
+const regenerarCuposManual = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const agendamiento = await agendamientoOperarioModels.findByPk(id);
+    if (!agendamiento) {
+      return httpError(res, "AGENDAMIENTO_NOT_FOUND", 404);
+    }
+    const result = await eliminarOSincronizarCupos(id, agendamiento.toJSON());
+    res.send({ success: true, message: 'Cupos resincronizados correctamente', result });
+  } catch (error) {
+    console.error('Error regenerarCuposManual:', error);
+    httpError(res, "ERROR_REGENERAR_CUPOS");
+  }
+};
+
 module.exports = {
     getAgendamientos,
     createAgendamiento,
@@ -434,6 +492,9 @@ module.exports = {
     getOperarios,
     getEmpresasOperario,
     getEstacionesEmpresa,
-        getIncumplidosCount, marcarIncumplidoRevisado, marcarTodosRevisados
-    
+    getIncumplidosCount, 
+    marcarIncumplidoRevisado, 
+    marcarTodosRevisados,
+    getCuposAgendamiento,
+    regenerarCuposManual
 }

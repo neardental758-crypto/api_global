@@ -347,7 +347,12 @@ const updateItem = async (req, res) => {
 };
 
 const getItemsByOrganization = async (req, res) => {
-    const filtro = JSON.parse(req.query.filter);
+    let filtro = {};
+    try {
+        filtro = req.query.filter ? JSON.parse(req.query.filter) : {};
+    } catch (e) {
+        filtro = {};
+    }
     const organization = filtro.organizationId;
     const page = parseInt(filtro.page) || 0;
     const limit = parseInt(filtro.limit) || 20;
@@ -357,35 +362,43 @@ const getItemsByOrganization = async (req, res) => {
     try {
         const empresa = await Empresa.findOne({
             where: { emp_id: organization },
-            attributes: ['emp_nombre']
+            attributes: ['emp_nombre', 'emp_id']
         });
         
-        if (!empresa) {
-            return res.send({ data: [], total: 0 });
-        }
-        
-        const estaciones = await Estacion.findAll({
-            where: { est_empresa: empresa.emp_nombre },
-            attributes: ['est_estacion']
-        });
-        
-        const estacionesNames = estaciones.map(e => e.est_estacion);
-        
-        if (estacionesNames.length === 0) {
-            return res.send({ data: [], total: 0 });
-        }
-        
+        const isBicycleCapital = !organization || 
+                                 organization === '6849f537c1ba10446a19fa4f' || 
+                                 organization === 'emp-bc' || 
+                                 (empresa && empresa.emp_nombre && empresa.emp_nombre.toLowerCase().includes('bicycle'));
+
         const whereClause = {
             practica_cupos: {
                 [Op.gt]: 0
             },
-            practica_estado: 'ACTIVA',
-            practica_estacion: {
-                [Op.in]: estacionesNames
-            }
+            practica_estado: 'ACTIVA'
         };
 
-        if (estacion && estacion.trim() !== "" && estacion !== "ALL") {
+        if (!isBicycleCapital) {
+            if (!empresa) {
+                return res.send({ data: [], total: 0 });
+            }
+            
+            const estaciones = await Estacion.findAll({
+                where: { est_empresa: empresa.emp_nombre },
+                attributes: ['est_estacion']
+            });
+            
+            const estacionesNames = estaciones.map(e => e.est_estacion);
+            
+            if (estacionesNames.length === 0) {
+                return res.send({ data: [], total: 0 });
+            }
+
+            whereClause.practica_estacion = {
+                [Op.in]: estacionesNames
+            };
+        }
+
+        if (estacion && estacion.trim() !== "" && estacion !== "ALL" && estacion !== "No hay estaciones") {
             whereClause.practica_estacion = estacion.trim();
         }
 

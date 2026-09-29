@@ -1,4 +1,4 @@
-const { practicaActivaModels } = require('../models');
+const { practicaActivaModels, agendamientoUsuariosModels } = require('../models');
 const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 
@@ -81,6 +81,7 @@ async function generarCuposParaAgendamiento(agendamiento, semanasAdelante = 4) {
     // Proyectamos hasta N semanas (ej. 28 días)
     const totalDiasProyeccion = semanasAdelante * 7;
     const itemsACrear = [];
+    let itemsActualizados = 0;
 
     for (let i = 0; i < totalDiasProyeccion; i++) {
       const fechaIteracion = new Date(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() + i);
@@ -102,26 +103,49 @@ async function generarCuposParaAgendamiento(agendamiento, semanasAdelante = 4) {
 
           const horaFinalFormatted = `${String(slotEndH).padStart(2, '0')}:${String(slotEndM).padStart(2, '0')}`;
           
-          // Crear fecha de inicio en formato Date UTC correspondiente a la hora local
           const year = fechaIteracion.getFullYear();
           const month = fechaIteracion.getMonth();
           const day = fechaIteracion.getDate();
 
-          // La fecha se almacena en formato ISO con la hora nominal local
+          // Si es hoy, omitir slots que ya hayan transcurrido en hora Colombia
+          if (i === 0) {
+            const slotLocalTime = new Date(year, month, day, slotStartH, slotStartM, 0, 0);
+            if (slotLocalTime <= ahoraColombia) {
+              currentSlotMin += 30;
+              continue;
+            }
+          }
+
+          // Variantes de formato de fecha almacenados en la BD (ISO nominal, DATETIME y legacy UTC+5)
           const slotStartDate = new Date(Date.UTC(year, month, day, slotStartH, slotStartM, 0, 0));
           const fechaISO = slotStartDate.toISOString();
+          const fechaDateTime = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(slotStartH).padStart(2, '0')}:${String(slotStartM).padStart(2, '0')}:00`;
+          const slotStartDateOffset = new Date(Date.UTC(year, month, day, slotStartH + 5, slotStartM, 0, 0));
+          const fechaISOOffset = slotStartDateOffset.toISOString();
 
-          // Verificar si ya existe un slot idéntico
+          // Verificar si ya existe un slot para esta estación y horario
           const existe = await practicaActivaModels.findOne({
             where: {
-              practica_funcionario: operario_id,
               practica_estacion: estacion_id,
-              practica_fecha: fechaISO,
+              practica_fecha: {
+                [Op.in]: [fechaISO, fechaDateTime, fechaISOOffset]
+              },
               practica_estado: { [Op.ne]: 'CANCELADA' }
             }
           });
 
-          if (!existe) {
+          if (existe) {
+            // Si el slot existente no tiene agendamiento_id asignado (slot huérfano), vincularlo a este agendamiento
+            if (!existe.agendamiento_id && id) {
+              await existe.update({
+                agendamiento_id: id,
+                practica_funcionario: operario_id,
+                practica_cupos: cupos_por_turno || 1,
+                practica_estado: 'ACTIVA'
+              });
+              itemsActualizados++;
+            }
+          } else {
             itemsACrear.push({
               _id: uuidv4(),
               practica_funcionario: operario_id,
@@ -144,7 +168,13 @@ async function generarCuposParaAgendamiento(agendamiento, semanasAdelante = 4) {
       await practicaActivaModels.bulkCreate(itemsACrear);
     }
 
-    return { success: true, count: itemsACrear.length };
+    const totalCount = itemsACrear.length + itemsActualizados;
+    return {
+      success: true,
+      count: totalCount,
+      created: itemsACrear.length,
+      updated: itemsActualizados
+    };
   } catch (error) {
     console.error('Error generando cupos para agendamiento:', error);
     return { success: false, error: error.message };
@@ -170,15 +200,45 @@ async function eliminarOSincronizarCupos(agendamientoId, nuevosDatos = null) {
       ahoraColombia.getMinutes(),
       0, 0
     )).toISOString();
+    const fechaActualDT = `${ahoraColombia.getFullYear()}-${String(ahoraColombia.getMonth() + 1).padStart(2, '0')}-${String(ahoraColombia.getDate()).padStart(2, '0')} ${String(ahoraColombia.getHours()).padStart(2, '0')}:${String(ahoraColombia.getMinutes()).padStart(2, '0')}:00`;
 
-    // Eliminar slots futuros que pertenezcan a este agendamiento_id
-    await practicaActivaModels.destroy({
+    // Buscar slots futuros que pertenezcan a este agendamiento_id
+    const slotsFuturos = await practicaActivaModels.findAll({
       where: {
         agendamiento_id: agendamientoId,
-        practica_fecha: { [Op.gte]: fechaActualISO },
-        practica_estado: 'ACTIVA'
-      }
+        practica_estado: 'ACTIVA',
+        [Op.or]: [
+          { practica_fecha: { [Op.gte]: fechaActualISO } },
+          { practica_fecha: { [Op.gte]: fechaActualDT } }
+        ]
+      },
+      attributes: ['_id']
     });
+
+    const slotIds = slotsFuturos.map(s => s._id);
+
+    if (slotIds.length > 0) {
+      let idsABorrar = slotIds;
+      if (agendamientoUsuariosModels) {
+        const reservados = await agendamientoUsuariosModels.findAll({
+          where: {
+            agendado_practica: { [Op.in]: slotIds },
+            agendado_estado: { [Op.ne]: 'CANCELADA' }
+          },
+          attributes: ['agendado_practica']
+        });
+        const reservadosSet = new Set(reservados.map(r => r.agendado_practica));
+        idsABorrar = slotIds.filter(id => !reservadosSet.has(id));
+      }
+
+      if (idsABorrar.length > 0) {
+        await practicaActivaModels.destroy({
+          where: {
+            _id: { [Op.in]: idsABorrar }
+          }
+        });
+      }
+    }
 
     // Si se enviaron nuevos datos y está activo, regenerar
     if (nuevosDatos && nuevosDatos.activo && nuevosDatos.crear_cupos_practica !== false) {
