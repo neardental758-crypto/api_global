@@ -1,7 +1,7 @@
 const models = require('../models');
 const { httpError } = require('../utils/handleError');
 
-const BOT_API_URL = process.env.WHATSAPP_BOT_API_URL || 'http://127.0.0.1:8000';
+const BOT_API_URL = process.env.WHATSAPP_BOT_API_URL || 'https://bot.movilidadsostenible.cloud';
 
 /**
  * Obtener lista de tickets de soporte WhatsApp con enriquecimiento de datos de usuario y préstamos activos.
@@ -9,32 +9,28 @@ const BOT_API_URL = process.env.WHATSAPP_BOT_API_URL || 'http://127.0.0.1:8000';
 const getTickets = async (req, res) => {
     try {
         const { status } = req.query;
-        const whereClause = {};
+        let url = `${BOT_API_URL}/api/v1/support/tickets`;
         if (status) {
-            whereClause.status = status;
+            url += `?status=${encodeURIComponent(status)}`;
         }
 
-        const tickets = await models.whatsappTicketsModels.findAll({
-            where: whereClause,
-            order: [['created_at', 'DESC']],
-            limit: 100,
-        });
+        const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+        if (!resp.ok) {
+            const errText = await resp.text();
+            console.error('Error desde bot API getTickets:', resp.status, errText);
+            return res.status(resp.status).json({ error: 'BOT_API_ERROR', details: errText });
+        }
 
-        // Enriquecer cada ticket con datos del usuario de la plataforma RIDE
-        const enriched = await Promise.all(tickets.map(async (ticket) => {
-            const raw = ticket.toJSON();
-            let parsedContext = {};
-            try {
-                parsedContext = raw.context_data ? JSON.parse(raw.context_data) : {};
-            } catch (e) {
-                parsedContext = {};
-            }
+        const tickets = await resp.json();
 
+        // Enriquecer cada ticket con datos del usuario de la plataforma RIDE desde MySQL
+        const enriched = await Promise.all(tickets.map(async (raw) => {
+            const parsedContext = raw.context_data || {};
             const doc = parsedContext.documento || null;
             let userData = null;
             let activeLoan = null;
 
-            if (doc) {
+            if (doc && models.usuarioModels) {
                 try {
                     userData = await models.usuarioModels.findOne({
                         where: { usu_documento: doc },
@@ -44,23 +40,25 @@ const getTickets = async (req, res) => {
                     userData = null;
                 }
 
-                try {
-                    activeLoan = await models.prestamosModels.findOne({
-                        where: {
-                            pre_usuario: doc,
-                            pre_estado: 'ACTIVO',
-                        },
-                        attributes: ['pre_id', 'pre_fecha_prestamo', 'pre_bicicleta'],
-                        include: [
-                            {
-                                model: models.bicicletasModels,
-                                attributes: ['bic_id', 'bic_numero', 'bic_nombre', 'bic_tipo'],
-                                required: false,
+                if (models.prestamosModels) {
+                    try {
+                        activeLoan = await models.prestamosModels.findOne({
+                            where: {
+                                pre_usuario: doc,
+                                pre_estado: 'ACTIVO',
                             },
-                        ],
-                    });
-                } catch (e) {
-                    activeLoan = null;
+                            attributes: ['pre_id', 'pre_fecha_prestamo', 'pre_bicicleta'],
+                            include: [
+                                {
+                                    model: models.bicicletasModels,
+                                    attributes: ['bic_id', 'bic_numero', 'bic_nombre', 'bic_tipo'],
+                                    required: false,
+                                },
+                            ],
+                        });
+                    } catch (e) {
+                        activeLoan = null;
+                    }
                 }
             }
 
@@ -91,12 +89,17 @@ const getMessages = async (req, res) => {
             return res.status(400).json({ error: 'WA_ID_REQUIRED' });
         }
 
-        const messages = await models.whatsappChatMessagesModels.findAll({
-            where: { wa_id: cleanWaId },
-            order: [['created_at', 'ASC']],
-            limit: 200,
+        const resp = await fetch(`${BOT_API_URL}/api/v1/support/conversations/${cleanWaId}/messages`, {
+            headers: { 'Accept': 'application/json' },
         });
 
+        if (!resp.ok) {
+            const errText = await resp.text();
+            console.error('Error desde bot API getMessages:', resp.status, errText);
+            return res.status(resp.status).json({ error: 'BOT_API_ERROR', details: errText });
+        }
+
+        const messages = await resp.json();
         res.json(messages);
     } catch (error) {
         console.error('Error al consultar historial de mensajes:', error);
@@ -119,7 +122,6 @@ const sendMessage = async (req, res) => {
 
         const senderName = agent_name || req.user?.nombre || req.user?.usu_nombre || 'Asesor SAU';
 
-        // Reenviar a la API del bot de WhatsApp
         const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/conversations/${cleanWaId}/send`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -152,19 +154,22 @@ const assignTicket = async (req, res) => {
         const { agent_name } = req.body;
         const assignedName = agent_name || req.user?.nombre || req.user?.usu_nombre || 'Asesor SAU';
 
-        const ticket = await models.whatsappTicketsModels.findOne({
-            where: { ticket_number },
+        const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/tickets/${ticket_number}/assign`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                agent_name: assignedName,
+            }),
         });
 
-        if (!ticket) {
-            return res.status(404).json({ error: 'TICKET_NOT_FOUND' });
+        if (!botResponse.ok) {
+            const errText = await botResponse.text();
+            console.error('Fallo al asignar ticket en bot API:', errText);
+            return res.status(botResponse.status).json({ error: 'ERROR_ASSIGNING_TICKET', details: errText });
         }
 
-        ticket.assigned_agent = assignedName;
-        ticket.status = 'ASSIGNED';
-        await ticket.save();
-
-        res.json({ success: true, ticket_number, assigned_agent: assignedName });
+        const data = await botResponse.json();
+        res.json(data);
     } catch (error) {
         console.error('Error al asignar ticket de WhatsApp:', error);
         httpError(res, 'ERROR_ASSIGN_WHATSAPP_TICKET', 500);
@@ -180,26 +185,22 @@ const resolveTicket = async (req, res) => {
         const cleanWaId = (wa_id || '').replace(/\D/g, '');
         const { farewell_message } = req.body;
 
-        // 1. Notificar al bot de FastAPI para reactivar el estado y enviar despedida
-        try {
-            await fetch(`${BOT_API_URL}/api/v1/support/conversations/${cleanWaId}/resolve`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    farewell_message: farewell_message || null,
-                }),
-            });
-        } catch (botErr) {
-            console.warn('Aviso: no se pudo notificar al bot de FastAPI directamente, resolviendo en BD:', botErr.message);
+        const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/conversations/${cleanWaId}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                farewell_message: farewell_message || null,
+            }),
+        });
+
+        if (!botResponse.ok) {
+            const errText = await botResponse.text();
+            console.error('Fallo al resolver ticket en bot API:', errText);
+            return res.status(botResponse.status).json({ error: 'ERROR_RESOLVING_TICKET', details: errText });
         }
 
-        // 2. Actualizar estado del ticket en BD
-        await models.whatsappTicketsModels.update(
-            { status: 'RESOLVED' },
-            { where: { wa_id: cleanWaId, status: ['OPEN', 'ASSIGNED'] } }
-        );
-
-        res.json({ success: true, wa_id: cleanWaId, status: 'RESOLVED' });
+        const data = await botResponse.json();
+        res.json(data);
     } catch (error) {
         console.error('Error al resolver ticket de WhatsApp:', error);
         httpError(res, 'ERROR_RESOLVE_WHATSAPP_TICKET', 500);
