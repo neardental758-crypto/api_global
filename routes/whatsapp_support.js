@@ -7,6 +7,8 @@ const {
     sendMessage,
     assignTicket,
     resolveTicket,
+    getScheduleSettings,
+    updateScheduleSettings,
 } = require('../controllers/whatsapp_support');
 
 /**
@@ -28,5 +30,9 @@ router.post('/tickets/:ticket_number/assign', authMiddleware(['all']), assignTic
 
 // Finalizar atención, resolver ticket y reactivar el bot
 router.post('/conversations/:wa_id/resolve', authMiddleware(['all']), resolveTicket);
+
+// Configuración de horarios de atención dinámica
+router.get('/settings/schedule', authMiddleware(['all']), getScheduleSettings);
+router.put('/settings/schedule', authMiddleware(['all']), updateScheduleSettings);
 
 module.exports = router;

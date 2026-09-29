@@ -207,10 +207,70 @@ const resolveTicket = async (req, res) => {
     }
 };
 
+/**
+ * Obtener la configuración actual de horarios de atención del bot.
+ */
+const getScheduleSettings = async (req, res) => {
+    try {
+        const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/settings/schedule`, {
+            headers: { 'Accept': 'application/json' },
+        });
+
+        if (!botResponse.ok) {
+            const errText = await botResponse.text();
+            console.error('Error al obtener horarios desde bot API:', errText);
+            return res.status(botResponse.status).json({ error: 'BOT_SCHEDULE_ERROR', details: errText });
+        }
+
+        const data = await botResponse.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error al consultar horarios de WhatsApp:', error);
+        httpError(res, 'ERROR_GET_SCHEDULE_SETTINGS', 500);
+    }
+};
+
+/**
+ * Actualizar la configuración de horarios de atención del bot.
+ */
+const updateScheduleSettings = async (req, res) => {
+    try {
+        const { is_enabled, mode, timezone, schedule_config, out_of_hours_message, allow_emergencies } = req.body;
+
+        const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/settings/schedule`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                is_enabled: is_enabled !== undefined ? is_enabled : true,
+                mode: mode || 'ALL_BOT',
+                timezone: timezone || 'America/Bogota',
+                schedule_config: schedule_config || {},
+                out_of_hours_message: out_of_hours_message || '',
+                allow_emergencies: allow_emergencies !== undefined ? allow_emergencies : true,
+            }),
+        });
+
+        if (!botResponse.ok) {
+            const errText = await botResponse.text();
+            console.error('Error al actualizar horarios en bot API:', errText);
+            return res.status(botResponse.status).json({ error: 'BOT_SCHEDULE_UPDATE_ERROR', details: errText });
+        }
+
+        const data = await botResponse.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error al actualizar horarios de WhatsApp:', error);
+        httpError(res, 'ERROR_UPDATE_SCHEDULE_SETTINGS', 500);
+    }
+};
+
 module.exports = {
     getTickets,
     getMessages,
     sendMessage,
     assignTicket,
     resolveTicket,
+    getScheduleSettings,
+    updateScheduleSettings,
 };
+
