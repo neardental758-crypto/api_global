@@ -75,8 +75,11 @@ const getItems = async (req, res) => {
             });
         }
 
-        // 3. Sanitizar Estacion para evitar crashes en bcapp si un registro tiene Estacion null
-        const sanitizedData = data.map(item => {
+        // 3. Sanitizar Estacion y deduplicar horarios por fecha/hora para la app móvil
+        const seenSlots = new Set();
+        const deduplicatedData = [];
+
+        for (const item of data) {
             const raw = item.toJSON ? item.toJSON() : item;
             if (!raw.Estacion) {
                 raw.Estacion = {
@@ -92,10 +95,21 @@ const getItems = async (req, res) => {
                     raw.Estacion.est_descripcion = 'Sin descripción';
                 }
             }
-            return raw;
-        });
 
-        res.send({ data: sanitizedData });
+            // Normalizar fecha a YYYY-MM-DD HH:mm para evitar que variaciones de formato
+            // (ISO vs DATETIME) o slots redundantes muestren botones repetidos en bcapp
+            const parsedMoment = moment.utc(raw.practica_fecha);
+            const slotKey = parsedMoment.isValid()
+                ? parsedMoment.format('YYYY-MM-DD HH:mm')
+                : `${raw.practica_fecha}`;
+
+            if (!seenSlots.has(slotKey)) {
+                seenSlots.add(slotKey);
+                deduplicatedData.push(raw);
+            }
+        }
+
+        res.send({ data: deduplicatedData });
     } catch (error) {
         httpError(res, `ERROR_GET_PRACTICA_ACTIVA ${error}`);
     }

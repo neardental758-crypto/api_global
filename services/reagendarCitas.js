@@ -41,11 +41,16 @@ async function reagendarCitas() {
       const nuevaFechaCita = moment(cita.practica_fecha).add(7, 'days');
       const nuevaFechaStr = nuevaFechaCita.format('YYYY-MM-DD HH:mm:ss');
 
+      const nuevaFechaISO = nuevaFechaCita.toISOString();
+      const nuevaFechaUtc = nuevaFechaCita.utc().format('YYYY-MM-DDTHH:mm:ss.000Z');
+
       // Verificar que no exista ya un turno en esa estación y fecha antes de crear
       const yaExiste = await practicaActivaModels.findOne({
         where: {
           practica_estacion: cita.practica_estacion,
-          practica_fecha: nuevaFechaStr,
+          practica_fecha: {
+            [Op.in]: [nuevaFechaStr, nuevaFechaISO, nuevaFechaUtc]
+          },
           practica_estado: { [Op.ne]: 'CANCELADA' }
         }
       });
