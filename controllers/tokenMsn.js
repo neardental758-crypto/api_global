@@ -641,6 +641,156 @@ const deleteScheduledNotification = async (req, res) => {
   }
 };
 
+const notificarLiberacionPrestamo = async (req, res) => {
+  try {
+    const { documento, nombreUsuario, bicicleta, estacion, minutos } = req.body;
+
+    if (!documento) {
+      return res.status(400).json({
+        success: false,
+        error: 'El campo documento es obligatorio'
+      });
+    }
+
+    // Buscar token del usuario en tokenMsn
+    const tokenRecord = await TokenMsn.findOne({
+      where: { documento: String(documento) }
+    });
+
+    // Opcionalmente buscar información del usuario si no viene el nombre
+    let usuario = null;
+    try {
+      usuario = await Usuario.findOne({
+        where: { usu_documento: String(documento) },
+        attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_empresa']
+      });
+    } catch (uErr) {
+      console.warn('No se pudo consultar bc_usuarios:', uErr.message);
+    }
+
+    const nombre = nombreUsuario || (usuario ? usuario.usu_nombre : '') || 'Usuario';
+    const email = (usuario ? usuario.usu_email : null) || (tokenRecord ? tokenRecord.email : null);
+    const token = tokenRecord ? tokenRecord.token : null;
+    const nombreBici = bicicleta || 'tu bicicleta';
+    const nombreEstacion = estacion || 'la estación';
+
+    const subject = '🚲 Préstamo finalizado en estación';
+    const message = `Hola ${nombre}, tu préstamo de la bicicleta ${nombreBici} ha sido finalizado automáticamente porque otro usuario la tomó tras permanecer más de 30 minutos en la estación ${nombreEstacion}. Si aún necesitas un vehículo, puedes realizar una nueva renta desde la App. ¡Gracias por ayudarnos a mantener el servicio disponible para todos! 💚`;
+
+    let pushSuccess = false;
+    let pushErrorMsg = null;
+    let messageId = null;
+
+    if (token && token.trim() !== '' && token.length > 140) {
+      try {
+        const msgId = `libera_${Date.now()}_${documento}`;
+        const pushMessage = {
+          token: token,
+          notification: {
+            title: subject,
+            body: message
+          },
+          android: {
+            priority: 'high',
+            notification: {
+              sound: 'default',
+              channelId: 'high_importance_channel'
+            },
+            data: {
+              click_action: 'FLUTTER_NOTIFICATION_CLICK',
+              messageType: 'push',
+              messageId: msgId,
+              isInApp: 'false'
+            }
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10',
+              'apns-push-type': 'alert'
+            },
+            payload: {
+              aps: {
+                alert: {
+                  title: subject,
+                  body: message
+                },
+                sound: 'default',
+                badge: 1,
+                contentAvailable: true
+              }
+            }
+          },
+          data: {
+            messageType: 'push',
+            messageId: msgId,
+            timestamp: Date.now().toString()
+          }
+        };
+
+        messageId = await admin.messaging().send(pushMessage);
+        pushSuccess = true;
+        console.log(`📲 [LIBERACIÓN N8N] Notificación push enviada a ${nombre} (${documento})`);
+      } catch (pushErr) {
+        pushErrorMsg = pushErr.message;
+        console.error(`❌ [LIBERACIÓN N8N] Error enviando push a ${documento}:`, pushErr.message);
+
+        if (pushErr.code === 'messaging/registration-token-not-registered' ||
+            pushErr.code === 'messaging/invalid-registration-token') {
+          try {
+            await TokenMsn.update(
+              { token: null },
+              { where: { documento: String(documento) } }
+            );
+            console.log(`🧹 Token inválido limpiado para usuario ${documento}`);
+          } catch (dbErr) {
+            console.error('Error limpiando token:', dbErr.message);
+          }
+        }
+      }
+    } else {
+      pushErrorMsg = !token ? 'Usuario sin token registrado' : 'Token inválido o vacío';
+      console.log(`⚠️ [LIBERACIÓN N8N] ${documento}: ${pushErrorMsg}`);
+    }
+
+    // Registrar en Historial de Notificaciones
+    try {
+      await HistorialNotificaciones.create({
+        hnot_remitente: 'Sistema n8n Liberación',
+        hnot_organizacion_id: (usuario && usuario.usu_empresa) ? usuario.usu_empresa : '1',
+        hnot_titulo: subject,
+        hnot_mensaje: message,
+        hnot_tipo_mensaje: 'push',
+        hnot_destinatarios: JSON.stringify([email || documento]),
+        hnot_destinatarios_conteo: 1,
+        hnot_exitosas: pushSuccess ? 1 : 0,
+        hnot_fallidas: pushSuccess ? 0 : 1,
+        hnot_fecha_envio: new Date()
+      });
+    } catch (histErr) {
+      console.warn('No se pudo guardar en historialNotificaciones:', histErr.message);
+    }
+
+    return res.json({
+      success: true,
+      notificadoPush: pushSuccess,
+      messageId: messageId,
+      error: pushErrorMsg,
+      destinatario: {
+        documento,
+        nombre,
+        tieneToken: Boolean(token)
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en notificarLiberacionPrestamo:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'ERROR_NOTIFICAR_LIBERACION'
+    });
+  }
+};
+
 module.exports = {
-    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory, createScheduledNotification, getScheduledNotifications, deleteScheduledNotification
+    getItems, getItem, createItem, patchItem, deleteItem, getItemDocument, getItemEmail, getNotificationUsersByOrganization, sendNotificationMessage, getNotificationHistory, createScheduledNotification, getScheduledNotifications, deleteScheduledNotification, notificarLiberacionPrestamo
 }
