@@ -16,35 +16,86 @@ const getItems = async (req, res) => {
         return httpError(res, 'INVALID_FILTER_JSON', 400);
     }
     
-    const organization = filtro.organizationId;
+    const organization = filtro.organizationId ? String(filtro.organizationId).trim() : null;
+    const todayStart = moment().utcOffset('-05:00').format('YYYY-MM-DD');
+    const whereCondition = {
+        practica_cupos: {
+            [Op.gt]: 0
+        },
+        practica_estado: 'ACTIVA',
+        practica_fecha: {
+            [Op.gte]: todayStart
+        }
+    };
     
     try {
-        const data = await practicaActivaModels.findAll({
-            where: {
-                practica_cupos: {
-                    [Op.gt]: 0
-                },
-                practica_estado: 'ACTIVA'
-            },
-            include : [{
-                model : Usuario,
-                attributes : ['usu_documento', 'usu_nombre'],
-                as: 'Funcionario',
-            },{
-                model : Estacion,
-                attributes : ['est_estacion', 'est_direccion', 'est_descripcion'],
-                as: 'Estacion',
-                include:[{
-                    model: Empresa,
-                    attributes: ['emp_id'],
-                    where : organization ? { emp_id : organization } : {}
-                  }],
-                required: organization ? true : false,
-            }],
-            order: [['practica_fecha', 'DESC']],
-            limit: 500
+        let data = [];
+
+        // 1. Si se especifica organización, buscar prácticas de las estaciones de esa empresa
+        if (organization) {
+            data = await practicaActivaModels.findAll({
+                where: whereCondition,
+                include: [{
+                    model: Usuario,
+                    attributes: ['usu_documento', 'usu_nombre'],
+                    as: 'Funcionario',
+                }, {
+                    model: Estacion,
+                    attributes: ['est_estacion', 'est_direccion', 'est_descripcion'],
+                    as: 'Estacion',
+                    include: [{
+                        model: Empresa,
+                        attributes: ['emp_id', 'emp_nombre'],
+                        where: { emp_id: organization }
+                    }],
+                    required: true,
+                }],
+                order: [['practica_fecha', 'ASC']],
+                limit: 500
+            });
+        }
+
+        // 2. Fallback: Si no se especificó organización o si la empresa del usuario no tiene turnos activos,
+        // traer los turnos activos generales para que el agendamiento nunca quede vacío
+        if (!data || data.length === 0) {
+            data = await practicaActivaModels.findAll({
+                where: whereCondition,
+                include: [{
+                    model: Usuario,
+                    attributes: ['usu_documento', 'usu_nombre'],
+                    as: 'Funcionario',
+                }, {
+                    model: Estacion,
+                    attributes: ['est_estacion', 'est_direccion', 'est_descripcion'],
+                    as: 'Estacion',
+                    required: false,
+                }],
+                order: [['practica_fecha', 'ASC']],
+                limit: 500
+            });
+        }
+
+        // 3. Sanitizar Estacion para evitar crashes en bcapp si un registro tiene Estacion null
+        const sanitizedData = data.map(item => {
+            const raw = item.toJSON ? item.toJSON() : item;
+            if (!raw.Estacion) {
+                raw.Estacion = {
+                    est_estacion: raw.practica_estacion || 'Estación',
+                    est_direccion: raw.practica_estacion ? `Estación ${raw.practica_estacion}` : 'Dirección no especificada',
+                    est_descripcion: 'Sin descripción'
+                };
+            } else {
+                if (!raw.Estacion.est_direccion) {
+                    raw.Estacion.est_direccion = raw.Estacion.est_estacion ? `Estación ${raw.Estacion.est_estacion}` : 'Dirección no especificada';
+                }
+                if (!raw.Estacion.est_descripcion) {
+                    raw.Estacion.est_descripcion = 'Sin descripción';
+                }
+            }
+            return raw;
         });
-        res.send({data});
+
+        res.send({ data: sanitizedData });
     } catch (error) {
         httpError(res, `ERROR_GET_PRACTICA_ACTIVA ${error}`);
     }
@@ -182,11 +233,28 @@ const createItem = async (req, res) => {
             sessionEnd.setMinutes(sessionEnd.getMinutes() + 30);
             
             if (sessionEnd <= endDateTime) {
-                const _id = uuidv4();
                 const horaFinalFormateada = `${String(sessionEnd.getHours()).padStart(2, '0')}:${String(sessionEnd.getMinutes()).padStart(2, '0')}`;
-                
                 const fechaFormateada = currentSession.toISOString();
-                
+                const fechaDateTime = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(currentSession.getHours()).padStart(2, '0')}:${String(currentSession.getMinutes()).padStart(2, '0')}:00`;
+
+                // Verificar si ya existe un slot para esta estación y horario para evitar duplicados
+                const existe = await practicaActivaModels.findOne({
+                    where: {
+                        practica_estacion: body.practica_estacion,
+                        practica_fecha: {
+                            [Op.in]: [fechaFormateada, fechaDateTime]
+                        },
+                        practica_estado: { [Op.ne]: 'CANCELADA' }
+                    }
+                });
+
+                if (existe) {
+                    sessionCount++;
+                    currentSession.setMinutes(currentSession.getMinutes() + 30);
+                    continue;
+                }
+
+                const _id = uuidv4();
                 const funcionarioDoc = body.practica_funcionario?.usu_documento || body.practica_funcionario?.idNumber || (typeof body.practica_funcionario === 'string' ? body.practica_funcionario : '');
                 
                 const newBody = {
@@ -287,10 +355,28 @@ const createMultipleItems = async (req, res) => {
                     sessionEnd.setMinutes(sessionEnd.getMinutes() + 30);
                     
                     if (sessionEnd <= dayEnd) {
-                        const _id = uuidv4();
                         const horaFinalFormateada = `${String(sessionEnd.getHours()).padStart(2, '0')}:${String(sessionEnd.getMinutes()).padStart(2, '0')}`;
                         const fechaFormateada = sessionStart.toISOString();
-                        
+                        const fechaDateTime = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(sessionStart.getHours()).padStart(2, '0')}:${String(sessionStart.getMinutes()).padStart(2, '0')}:00`;
+
+                        // Verificar si ya existe un slot para esta estación y horario para evitar duplicados
+                        const existe = await practicaActivaModels.findOne({
+                            where: {
+                                practica_estacion: practica_estacion,
+                                practica_fecha: {
+                                    [Op.in]: [fechaFormateada, fechaDateTime]
+                                },
+                                practica_estado: { [Op.ne]: 'CANCELADA' }
+                            }
+                        });
+
+                        if (existe) {
+                            recordCount++;
+                            sessionStart.setMinutes(sessionStart.getMinutes() + 30);
+                            continue;
+                        }
+
+                        const _id = uuidv4();
                         const funcionarioDoc = practica_funcionario?.usu_documento || practica_funcionario?.idNumber || (typeof practica_funcionario === 'string' ? practica_funcionario : '');
                         
                         const newBody = {

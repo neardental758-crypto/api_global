@@ -2,6 +2,7 @@ const { practicaActivaModels, agendamientoOperarioModels } = require('../models'
 const { generarCuposParaAgendamiento } = require('./practicaGenerator');
 const moment = require('moment');
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 
 async function reagendarCitas() {
   try {
@@ -20,8 +21,9 @@ async function reagendarCitas() {
     }
 
     // 2. Reagendado semanal de citas independientes
-    const hace7Dias = moment().subtract(7, 'days').format('YYYY-MM-DD');
-    const { Op } = require('sequelize');
+    // Solo tomar citas vencidas en los últimos 7 días (estrictamente en el pasado, no futuras)
+    const hace7Dias = moment().subtract(7, 'days').format('YYYY-MM-DD 00:00:00');
+    const hoy = moment().format('YYYY-MM-DD 00:00:00');
 
     const citasReagendadas = await practicaActivaModels.findAll({
       where: {
@@ -29,28 +31,39 @@ async function reagendarCitas() {
         reagendada: true,
         agendamiento_id: null,
         practica_fecha: {
-          [Op.gte]: hace7Dias
+          [Op.gte]: hace7Dias,
+          [Op.lt]: hoy
         }
       },
     });
 
     for (const cita of citasReagendadas) {
       const nuevaFechaCita = moment(cita.practica_fecha).add(7, 'days');
-      
-      const citaData = cita.toJSON();
-      
-      const nuevaPractica = {
-        ...citaData,
-        _id: uuidv4(),
-        practica_fecha: nuevaFechaCita.format('YYYY-MM-DD HH:mm:ss'),
-        reagendada: true,
-      };
+      const nuevaFechaStr = nuevaFechaCita.format('YYYY-MM-DD HH:mm:ss');
 
-      delete nuevaPractica.id;
-      
-      await practicaActivaModels.create(nuevaPractica);
+      // Verificar que no exista ya un turno en esa estación y fecha antes de crear
+      const yaExiste = await practicaActivaModels.findOne({
+        where: {
+          practica_estacion: cita.practica_estacion,
+          practica_fecha: nuevaFechaStr,
+          practica_estado: { [Op.ne]: 'CANCELADA' }
+        }
+      });
 
-      // Desactivar reagendado en la cita original para evitar duplicaciones infinitas
+      if (!yaExiste) {
+        const citaData = cita.toJSON();
+        const nuevaPractica = {
+          ...citaData,
+          _id: uuidv4(),
+          practica_fecha: nuevaFechaStr,
+          reagendada: true,
+        };
+
+        delete nuevaPractica.id;
+        await practicaActivaModels.create(nuevaPractica);
+      }
+
+      // Desactivar reagendado en la cita original para evitar duplicaciones
       await cita.update({ reagendada: false });
     }
 
