@@ -7,7 +7,7 @@ const nombre_cortezza = 'Cortezza MDN';
 const getItems = async (req, res) => {
     try {
       const data = await estacionModels.findAll({
-        attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion", "est_latitud", "est_longitud"],
+        attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion", "est_latitud", "est_longitud", "est_last_conect"],
       });
       res.send({ data });
     } catch (error) {
@@ -44,7 +44,7 @@ const getItemEmpresa = async (req, res) => {
         const { est_empresa } = req
         console.log("[bc_estaciones] getItemEmpresa est_empresa=", est_empresa);
         const data = await estacionModels.findAll({
-            attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion", "est_latitud", "est_longitud"],
+            attributes: ["est_id", "est_estacion", "est_empresa", "est_direccion", "est_latitud", "est_longitud", "est_last_conect"],
             where: { est_empresa: est_empresa }
         });
         res.send({data});

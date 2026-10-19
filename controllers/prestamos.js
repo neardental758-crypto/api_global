@@ -491,6 +491,30 @@ const createItem = async (req, res) => {
         const fechaHora = new Date(body.pre_devolucion_hora);
         body.pre_devolucion_hora = fechaHora.toTimeString().slice(0, 8);
       }
+    } else if (body.pre_retiro_estacion) {
+      // Para préstamos desde apps móviles, garantizar que la fecha de devolución respete las horas permitidas de la estación (ej: 72 horas)
+      try {
+        const estacion = await Estacion.findOne({
+          where: { est_estacion: body.pre_retiro_estacion }
+        });
+
+        if (estacion && estacion.est_last_conect) {
+          const horasPermitidas = parseInt(estacion.est_last_conect, 10);
+          if (!isNaN(horasPermitidas) && horasPermitidas > 0) {
+            const fechaRetiroBase = body.pre_retiro_fecha ? new Date(body.pre_retiro_fecha) : new Date();
+            if (!isNaN(fechaRetiroBase.getTime())) {
+              const fechaDevolucionCalculada = new Date(fechaRetiroBase.getTime() + (horasPermitidas * 60 * 60 * 1000));
+              body.pre_devolucion_fecha = fechaDevolucionCalculada.toISOString();
+
+              if (!body.pre_devolucion_hora && body.pre_retiro_hora) {
+                body.pre_devolucion_hora = body.pre_retiro_hora;
+              }
+            }
+          }
+        }
+      } catch (errEstacion) {
+        console.error('⚠️ [createItem] Error al validar est_last_conect de la estación:', errEstacion.message);
+      }
     }
 
     const data = await prestamosModels.create(body);

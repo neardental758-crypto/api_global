@@ -363,6 +363,43 @@ const verificarPrestamosVencidos = async () => {
     console.log('🔄 [CRON] Iniciando control de préstamos vencidos...');
     const ahora = new Date(new Date().getTime() - (5 * 60 * 60 * 1000));
 
+    // 1. Auto-corregir préstamos activos cuya fecha de devolución fue guardada menor a las horas de la estación (ej: 72 horas)
+    try {
+      const prestamosActivos = await prestamosModels.findAll({
+        where: { pre_estado: 'ACTIVA' }
+      });
+
+      for (const p of prestamosActivos) {
+        if (p.pre_retiro_estacion && p.pre_retiro_fecha) {
+          const est = await estacionModels.findOne({
+            where: { est_estacion: p.pre_retiro_estacion },
+            attributes: ['est_last_conect']
+          });
+
+          if (est && est.est_last_conect) {
+            const horasPermitidas = parseInt(est.est_last_conect, 10);
+            if (!isNaN(horasPermitidas) && horasPermitidas > 0) {
+              const retiro = new Date(p.pre_retiro_fecha);
+              const vencimientoReal = new Date(retiro.getTime() + (horasPermitidas * 60 * 60 * 1000));
+              const vencimientoActual = p.pre_devolucion_fecha ? new Date(p.pre_devolucion_fecha) : null;
+
+              // Si el vencimiento actual es notablemente menor al que corresponde por la estación
+              if (!vencimientoActual || vencimientoActual.getTime() < (vencimientoReal.getTime() - (60 * 60 * 1000))) {
+                const updates = { pre_devolucion_fecha: vencimientoReal.toISOString() };
+                if (p.pre_finalizado_por && p.pre_finalizado_por.startsWith('NOTIFICADO_VENCIDO_')) {
+                  updates.pre_finalizado_por = null;
+                }
+                await prestamosModels.update(updates, { where: { pre_id: p.pre_id } });
+                console.log(`🔧 [CRON] Préstamo activo ${p.pre_id} (${p.pre_retiro_estacion}) ajustado a ${horasPermitidas} horas (nueva fecha: ${vencimientoReal.toISOString()}).`);
+              }
+            }
+          }
+        }
+      }
+    } catch (errSync) {
+      console.error('⚠️ [CRON] Error al sincronizar horas de préstamos activos:', errSync.message);
+    }
+
     // Query active loans that are expired and have not been notified
     const prestamosVencidos = await prestamosModels.findAll({
       where: {
