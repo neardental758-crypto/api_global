@@ -1,5 +1,6 @@
 const models = require('../models');
 const { httpError } = require('../utils/handleError');
+const { Op } = require('sequelize');
 
 const BOT_API_URL = process.env.WHATSAPP_BOT_API_URL || 'https://bot.movilidadsostenible.cloud';
 
@@ -30,21 +31,56 @@ const getTickets = async (req, res) => {
             let userData = null;
             let activeLoan = null;
 
-            if (doc && models.usuarioModels) {
+            if (models.usuarioModels) {
                 try {
-                    userData = await models.usuarioModels.findOne({
-                        where: { usu_documento: doc },
-                        attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_telefono', 'usu_empresa', 'usu_ciudad'],
-                    });
+                    // 1. Búsqueda por documento si fue ingresado en la conversación
+                    if (doc) {
+                        userData = await models.usuarioModels.findOne({
+                            where: { usu_documento: doc },
+                            attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_telefono', 'usu_empresa', 'usu_ciudad'],
+                        });
+                    }
+
+                    // 2. Si no se encontró por documento, buscar por número de teléfono de WhatsApp (wa_id)
+                    if (!userData && raw.wa_id) {
+                        const cleanDigits = String(raw.wa_id).replace(/\D/g, '');
+                        const last10 = cleanDigits.length >= 10 ? cleanDigits.slice(-10) : cleanDigits;
+                        const phoneVariants = [cleanDigits, last10, `+${cleanDigits}`];
+                        if (cleanDigits.startsWith('57') && cleanDigits.length > 2) {
+                            phoneVariants.push(cleanDigits.substring(2));
+                        }
+
+                        const whereConditions = [
+                            { usu_telefono: { [Op.in]: phoneVariants } }
+                        ];
+                        if (last10.length >= 7) {
+                            whereConditions.push({ usu_telefono: { [Op.like]: `%${last10}%` } });
+                        }
+
+                        userData = await models.usuarioModels.findOne({
+                            where: { [Op.or]: whereConditions },
+                            attributes: ['usu_documento', 'usu_nombre', 'usu_email', 'usu_telefono', 'usu_empresa', 'usu_ciudad'],
+                        });
+                    }
                 } catch (e) {
                     userData = null;
                 }
 
-                if (models.prestamosModels) {
+                // 3. Fallback de nombre: Si no está en BD de RIDE pero se capturó nombre de WhatsApp
+                if (!userData && (parsedContext.nombre_usuario || parsedContext.profile_name)) {
+                    userData = {
+                        usu_nombre: parsedContext.nombre_usuario || parsedContext.profile_name,
+                        usu_telefono: raw.wa_id,
+                        usu_empresa: parsedContext.empresa || null,
+                    };
+                }
+
+                const userDoc = (userData && userData.usu_documento) || doc;
+                if (userDoc && models.prestamosModels) {
                     try {
                         activeLoan = await models.prestamosModels.findOne({
                             where: {
-                                pre_usuario: doc,
+                                pre_usuario: userDoc,
                                 pre_estado: 'ACTIVO',
                             },
                             attributes: ['pre_id', 'pre_fecha_prestamo', 'pre_bicicleta'],
@@ -264,6 +300,41 @@ const updateScheduleSettings = async (req, res) => {
     }
 };
 
+/**
+ * Streaming proxy para archivos de audio de notas de voz de WhatsApp.
+ */
+const getMediaAudio = async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const cleanFilename = (filename || '').replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!cleanFilename) {
+            return res.status(400).json({ error: 'INVALID_FILENAME' });
+        }
+
+        const audioUrl = `${BOT_API_URL}/api/v1/support/media/audio/${cleanFilename}`;
+        const resp = await fetch(audioUrl);
+
+        if (!resp.ok) {
+            return res.status(resp.status).json({ error: 'AUDIO_NOT_FOUND' });
+        }
+
+        const contentType = resp.headers.get('content-type') || 'audio/ogg';
+        const contentLength = resp.headers.get('content-length');
+
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Accept-Ranges', 'bytes');
+        if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+        }
+
+        const buffer = await resp.arrayBuffer();
+        res.send(Buffer.from(buffer));
+    } catch (error) {
+        console.error('Error transmitiendo audio de WhatsApp:', error);
+        httpError(res, 'ERROR_STREAMING_AUDIO', 500);
+    }
+};
+
 module.exports = {
     getTickets,
     getMessages,
@@ -272,5 +343,7 @@ module.exports = {
     resolveTicket,
     getScheduleSettings,
     updateScheduleSettings,
+    getMediaAudio,
 };
+
 

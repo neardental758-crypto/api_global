@@ -9,6 +9,7 @@ const {
     resolveTicket,
     getScheduleSettings,
     updateScheduleSettings,
+    getMediaAudio,
 } = require('../controllers/whatsapp_support');
 
 /**
@@ -21,6 +22,9 @@ router.get('/tickets', authMiddleware(['all']), getTickets);
 
 // Obtener historial cronológico de mensajes de una conversación
 router.get('/conversations/:wa_id/messages', authMiddleware(['all']), getMessages);
+
+// Streaming de archivos de audio / notas de voz
+router.get('/media/audio/:filename', getMediaAudio);
 
 // Enviar mensaje del asesor hacia el usuario de WhatsApp
 router.post('/conversations/:wa_id/send', authMiddleware(['all']), sendMessage);
