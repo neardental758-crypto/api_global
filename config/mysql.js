@@ -24,11 +24,11 @@ const sequelize = new Sequelize(
             connectTimeout: 30000
         },
         pool: {
-            max: 5,             // Máximo de conexiones simultáneas en el pool
-            min: 0,             // 0 para no forzar conexiones abiertas permanentes cuando no hay uso
+            max: 10,            // Máximo de conexiones simultáneas en el pool
+            min: 2,             // Mantiene al menos 2 conexiones vivas y reutilizables para evitar handshakes continuos
             acquire: 30000,     // Tiempo máximo de espera para obtener una conexión (30s)
-            idle: 10000,        // Cierra conexiones inactivas después de 10s para evitar que MySQL las mate por wait_timeout
-            evict: 10000        // Intervalo de limpieza de conexiones inactivas
+            idle: 60000,        // Mantiene la conexión viva durante 60s antes de considerarla inactiva
+            evict: 30000        // Intervalo de revisión de conexiones inactivas
         }
     }
 );
