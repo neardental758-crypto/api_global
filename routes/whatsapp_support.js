@@ -10,6 +10,7 @@ const {
     getScheduleSettings,
     updateScheduleSettings,
     getMediaAudio,
+    getMediaImage,
 } = require('../controllers/whatsapp_support');
 
 /**
@@ -25,6 +26,9 @@ router.get('/conversations/:wa_id/messages', authMiddleware(['all']), getMessage
 
 // Streaming de archivos de audio / notas de voz
 router.get('/media/audio/:filename', getMediaAudio);
+
+// Streaming de archivos de imagen enviados en WhatsApp
+router.get('/media/image/:filename', getMediaImage);
 
 // Enviar mensaje del asesor hacia el usuario de WhatsApp
 router.post('/conversations/:wa_id/send', authMiddleware(['all']), sendMessage);

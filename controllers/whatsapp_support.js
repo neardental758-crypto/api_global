@@ -335,6 +335,40 @@ const getMediaAudio = async (req, res) => {
     }
 };
 
+/**
+ * Streaming proxy para archivos de imagen enviados en WhatsApp.
+ */
+const getMediaImage = async (req, res) => {
+    try {
+        const { filename } = req.params;
+        const cleanFilename = (filename || '').replace(/[^a-zA-Z0-9._-]/g, '');
+        if (!cleanFilename) {
+            return res.status(400).json({ error: 'INVALID_FILENAME' });
+        }
+
+        const imageUrl = `${BOT_API_URL}/api/v1/support/media/image/${cleanFilename}`;
+        const resp = await fetch(imageUrl);
+
+        if (!resp.ok) {
+            return res.status(resp.status).json({ error: 'IMAGE_NOT_FOUND' });
+        }
+
+        const contentType = resp.headers.get('content-type') || 'image/jpeg';
+        const contentLength = resp.headers.get('content-length');
+
+        res.setHeader('Content-Type', contentType);
+        if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+        }
+
+        const buffer = await resp.arrayBuffer();
+        res.send(Buffer.from(buffer));
+    } catch (error) {
+        console.error('Error transmitiendo imagen de WhatsApp:', error);
+        httpError(res, 'ERROR_STREAMING_IMAGE', 500);
+    }
+};
+
 module.exports = {
     getTickets,
     getMessages,
@@ -344,6 +378,8 @@ module.exports = {
     getScheduleSettings,
     updateScheduleSettings,
     getMediaAudio,
+    getMediaImage,
 };
+
 
 
