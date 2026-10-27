@@ -45,4 +45,12 @@ app.listen(port, () => {
     console.log(`🚀 API lista por el puerto: ${port}`);
 });
 
+process.on('uncaughtException', (err) => {
+    console.error('🚨 [uncaughtException]:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 [unhandledRejection]:', reason);
+});
+
 dbConnectMysql();

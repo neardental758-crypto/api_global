@@ -21,14 +21,16 @@ const sequelize = new Sequelize(
             freezeTableName: true, // congela el nombre de la tabla y no le agrega el plural
         },
         dialectOptions: {
-            connectTimeout: 30000
+            connectTimeout: 30000,
+            enableKeepAlive: true,
+            keepAliveInitialDelay: 10000
         },
         pool: {
-            max: 10,            // Máximo de conexiones simultáneas en el pool
-            min: 2,             // Mantiene al menos 2 conexiones vivas y reutilizables para evitar handshakes continuos
+            max: 5,             // Máximo de conexiones simultáneas en el pool (controla el uso de recursos)
+            min: 1,             // Mantiene al menos 1 conexión viva y reutilizable para evitar abrir nuevas conexiones en cada petición
             acquire: 30000,     // Tiempo máximo de espera para obtener una conexión (30s)
-            idle: 60000,        // Mantiene la conexión viva durante 60s antes de considerarla inactiva
-            evict: 30000        // Intervalo de revisión de conexiones inactivas
+            idle: 120000,       // Mantiene la conexión viva 2 minutos antes de considerarla inactiva
+            evict: 15000        // Intervalo de revisión de conexiones inactivas
         }
     }
 );

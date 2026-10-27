@@ -162,7 +162,7 @@ const startAgendamientosCleanup = () => {
 };
 
 const startReservationsCleanup = () => {
-  cron.schedule('* * * * *', async () => {
+  cron.schedule('*/2 * * * *', async () => {
     try {
       const reservas = await reservasModels.findAll({ where: { res_estado: 'ACTIVA' } });
       
