@@ -24,8 +24,14 @@ const getTickets = async (req, res) => {
 
         const tickets = await resp.json();
 
+        // Filtrar tickets sin wa_id o con wa_id inválido (debe tener al menos 7 dígitos para ser un número real)
+        const validTickets = (tickets || []).filter((raw) => {
+            const cleanDigits = String(raw.wa_id || '').replace(/\D/g, '');
+            return cleanDigits.length >= 7;
+        });
+
         // Enriquecer cada ticket con datos del usuario de la plataforma RIDE desde MySQL
-        const enriched = await Promise.all(tickets.map(async (raw) => {
+        const enriched = await Promise.all(validTickets.map(async (raw) => {
             const parsedContext = raw.context_data || {};
             const doc = parsedContext.documento || null;
             let userData = null;
@@ -68,11 +74,18 @@ const getTickets = async (req, res) => {
 
                 // 3. Fallback de nombre: Si no está en BD de RIDE pero se capturó nombre de WhatsApp
                 if (!userData && (parsedContext.nombre_usuario || parsedContext.profile_name)) {
+                    const candidateName = String(parsedContext.nombre_usuario || parsedContext.profile_name || '').trim();
+                    const hasValidChars = /[a-zA-Z0-9]/.test(candidateName);
                     userData = {
-                        usu_nombre: parsedContext.nombre_usuario || parsedContext.profile_name,
+                        usu_nombre: hasValidChars ? candidateName : 'Usuario WhatsApp',
                         usu_telefono: raw.wa_id,
                         usu_empresa: parsedContext.empresa || null,
                     };
+                }
+
+                // Sanitizar nombre si quedó con solo signos, puntos o espacios
+                if (userData && userData.usu_nombre && !/[a-zA-Z0-9]/.test(userData.usu_nombre)) {
+                    userData.usu_nombre = 'Usuario WhatsApp';
                 }
 
                 const userDoc = (userData && userData.usu_documento) || doc;
@@ -213,13 +226,18 @@ const assignTicket = async (req, res) => {
 };
 
 /**
- * Finalizar la atención del ticket y reactivar el bot.
+ * Finalizar la atención del ticket y reactivar el bot por wa_id (o delegar a número si no hay wa_id).
  */
 const resolveTicket = async (req, res) => {
     try {
         const { wa_id } = req.params;
         const cleanWaId = (wa_id || '').replace(/\D/g, '');
-        const { farewell_message } = req.body;
+        const { farewell_message, ticket_number } = req.body;
+
+        if (!cleanWaId && ticket_number) {
+            req.params.ticket_number = ticket_number;
+            return resolveTicketByNumber(req, res);
+        }
 
         const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/conversations/${cleanWaId}/resolve`, {
             method: 'POST',
@@ -240,6 +258,36 @@ const resolveTicket = async (req, res) => {
     } catch (error) {
         console.error('Error al resolver ticket de WhatsApp:', error);
         httpError(res, 'ERROR_RESOLVE_WHATSAPP_TICKET', 500);
+    }
+};
+
+/**
+ * Finalizar la atención del ticket directamente por ticket_number.
+ */
+const resolveTicketByNumber = async (req, res) => {
+    try {
+        const { ticket_number } = req.params;
+        const { farewell_message } = req.body;
+
+        const botResponse = await fetch(`${BOT_API_URL}/api/v1/support/tickets/${ticket_number}/resolve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                farewell_message: farewell_message || null,
+            }),
+        });
+
+        if (!botResponse.ok) {
+            const errText = await botResponse.text();
+            console.error('Fallo al resolver ticket por número en bot API:', errText);
+            return res.status(botResponse.status).json({ error: 'ERROR_RESOLVING_TICKET', details: errText });
+        }
+
+        const data = await botResponse.json();
+        res.json(data);
+    } catch (error) {
+        console.error('Error al resolver ticket por número en WhatsApp:', error);
+        httpError(res, 'ERROR_RESOLVE_WHATSAPP_TICKET_BY_NUMBER', 500);
     }
 };
 
@@ -375,6 +423,7 @@ module.exports = {
     sendMessage,
     assignTicket,
     resolveTicket,
+    resolveTicketByNumber,
     getScheduleSettings,
     updateScheduleSettings,
     getMediaAudio,

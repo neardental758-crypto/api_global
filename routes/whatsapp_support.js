@@ -7,6 +7,7 @@ const {
     sendMessage,
     assignTicket,
     resolveTicket,
+    resolveTicketByNumber,
     getScheduleSettings,
     updateScheduleSettings,
     getMediaAudio,
@@ -36,7 +37,10 @@ router.post('/conversations/:wa_id/send', authMiddleware(['all']), sendMessage);
 // Asignar ticket a un asesor
 router.post('/tickets/:ticket_number/assign', authMiddleware(['all']), assignTicket);
 
-// Finalizar atención, resolver ticket y reactivar el bot
+// Finalizar atención directamente por ticket_number
+router.post('/tickets/:ticket_number/resolve', authMiddleware(['all']), resolveTicketByNumber);
+
+// Finalizar atención, resolver ticket y reactivar el bot por wa_id
 router.post('/conversations/:wa_id/resolve', authMiddleware(['all']), resolveTicket);
 
 // Configuración de horarios de atención dinámica
