@@ -23,7 +23,58 @@ const getItem = async (req, res) => {
         const { usuario } = req;
 
         // Buscar el registro por su clave primaria
-        const data = await TyCParqueoModels.findByPk(usuario);
+        let data = await TyCParqueoModels.findByPk(usuario);
+
+        // Si el registro existe, auto-corregir datos incompletos en caso de venir con campos vacíos
+        if (data) {
+            let needsUpdate = false;
+            const updatedFields = {};
+
+            // 1. Validar y corregir ultimo_vehiculo si está vacío, es null, "sin vehiculos" (con s) o indefinido
+            const ultimoVeh = (data.ultimo_vehiculo || "").trim();
+            if (!ultimoVeh || ultimoVeh === "sin vehiculos" || ultimoVeh === "null" || ultimoVeh === "undefined") {
+                // Verificar si el usuario ya tiene un vehículo registrado en vp_vehiculos_usuario
+                const vehiculoRegistrado = await VpusuariosModels.findOne({
+                    where: { vus_usuario: usuario }
+                });
+
+                if (vehiculoRegistrado && vehiculoRegistrado.vus_id) {
+                    updatedFields.ultimo_vehiculo = String(vehiculoRegistrado.vus_id);
+                } else {
+                    updatedFields.ultimo_vehiculo = "sin vehiculo";
+                }
+                needsUpdate = true;
+            }
+
+            // 2. Validar y corregir email y teléfono si están vacíos
+            const emailActual = (data.email || "").trim();
+            const telefonoActual = (data.telefono || "").trim();
+            if (!emailActual || !telefonoActual) {
+                const usuarioInfo = await usuarioModels.findOne({
+                    where: { usu_documento: usuario },
+                    attributes: ['usu_email', 'usu_telefono']
+                });
+
+                if (usuarioInfo) {
+                    if (!emailActual && usuarioInfo.usu_email) {
+                        updatedFields.email = usuarioInfo.usu_email;
+                        needsUpdate = true;
+                    }
+                    if (!telefonoActual && usuarioInfo.usu_telefono) {
+                        updatedFields.telefono = usuarioInfo.usu_telefono;
+                        needsUpdate = true;
+                    }
+                }
+            }
+
+            // Si se detectaron correcciones necesarias, persistir en base de datos
+            if (needsUpdate) {
+                await TyCParqueoModels.update(updatedFields, {
+                    where: { usuario }
+                });
+                data = await TyCParqueoModels.findByPk(usuario);
+            }
+        }
 
         // Verificar si el registro existe
         const response = data ? 1 : 0;
@@ -37,8 +88,58 @@ const getItem = async (req, res) => {
 const createItem = async (req, res) => {
     try {
         const { body } = req;
-        // Crear el registro en la base de datos
-        const data = await TyCParqueoModels.create(body);
+        const usuarioDoc = String(body.usuario).trim();
+
+        let email = (body.email || '').trim();
+        let telefono = (body.telefono || '').trim();
+        let ultimo_vehiculo = (body.ultimo_vehiculo || '').trim();
+
+        // Normalizar ultimo_vehiculo si viene vacío, 'sin vehiculos' o inválido
+        if (!ultimo_vehiculo || ultimo_vehiculo === 'sin vehiculos' || ultimo_vehiculo === 'null' || ultimo_vehiculo === 'undefined') {
+            const vehiculoRegistrado = await VpusuariosModels.findOne({
+                where: { vus_usuario: usuarioDoc }
+            });
+            ultimo_vehiculo = (vehiculoRegistrado && vehiculoRegistrado.vus_id)
+                ? String(vehiculoRegistrado.vus_id)
+                : 'sin vehiculo';
+        }
+
+        // Si faltan email o teléfono, buscarlos en bc_usuarios
+        if (!email || !telefono) {
+            const usuarioInfo = await usuarioModels.findOne({
+                where: { usu_documento: usuarioDoc },
+                attributes: ['usu_email', 'usu_telefono']
+            });
+            if (usuarioInfo) {
+                if (!email && usuarioInfo.usu_email) email = usuarioInfo.usu_email;
+                if (!telefono && usuarioInfo.usu_telefono) telefono = usuarioInfo.usu_telefono;
+            }
+        }
+
+        const recordData = {
+            usuario: usuarioDoc,
+            fecha_inscripcion: body.fecha_inscripcion || new Date().toISOString(),
+            ultimo_vehiculo: ultimo_vehiculo,
+            telefono: telefono,
+            email: email,
+            saldo: body.saldo !== undefined && body.saldo !== null ? parseInt(body.saldo) : 0,
+            estado: body.estado || 'activo'
+        };
+
+        // Si el registro ya existe (por ejemplo, creado previamente por recarga de saldo), actualizarlo (upsert)
+        const existingRecord = await TyCParqueoModels.findByPk(usuarioDoc);
+        let data;
+        if (existingRecord) {
+            // Mantener el saldo previo si la petición no especifica saldo o viene en 0
+            if (existingRecord.saldo > 0 && (!body.saldo || body.saldo === 0)) {
+                recordData.saldo = existingRecord.saldo;
+            }
+            await TyCParqueoModels.update(recordData, { where: { usuario: usuarioDoc } });
+            data = await TyCParqueoModels.findByPk(usuarioDoc);
+        } else {
+            data = await TyCParqueoModels.create(recordData);
+        }
+
         // Enviar una respuesta de éxito
         res.send({ message: "ok", data: data });
     } catch (e) {
@@ -297,17 +398,52 @@ const recargarSaldoUsuario = async (req, res) => {
         const nuevoSaldo = saldoActual + horas;
 
         if (usuarioTyC) {
+            const updatePayload = { saldo: nuevoSaldo };
+            // Si el registro existente tenía ultimo_vehiculo vacío o inválido, corregirlo
+            const ultimoVeh = (usuarioTyC.ultimo_vehiculo || '').trim();
+            if (!ultimoVeh || ultimoVeh === 'sin vehiculos' || ultimoVeh === 'null' || ultimoVeh === 'undefined') {
+                const vehiculoRegistrado = await VpusuariosModels.findOne({
+                    where: { vus_usuario: usuarioDoc }
+                });
+                updatePayload.ultimo_vehiculo = (vehiculoRegistrado && vehiculoRegistrado.vus_id)
+                    ? String(vehiculoRegistrado.vus_id)
+                    : 'sin vehiculo';
+            }
+            // Si faltaba email o teléfono, completarlos
+            if (!usuarioTyC.email || !usuarioTyC.telefono) {
+                const usuarioInfo = await usuarioModels.findOne({
+                    where: { usu_documento: usuarioDoc },
+                    attributes: ['usu_email', 'usu_telefono']
+                });
+                if (usuarioInfo) {
+                    if (!usuarioTyC.email && usuarioInfo.usu_email) updatePayload.email = usuarioInfo.usu_email;
+                    if (!usuarioTyC.telefono && usuarioInfo.usu_telefono) updatePayload.telefono = usuarioInfo.usu_telefono;
+                }
+            }
+
             await TyCParqueoModels.update(
-                { saldo: nuevoSaldo },
+                updatePayload,
                 { where: { usuario: usuarioDoc } }
             );
         } else {
+            // Obtener email y teléfono de bc_usuarios
+            const usuarioInfo = await usuarioModels.findOne({
+                where: { usu_documento: usuarioDoc },
+                attributes: ['usu_email', 'usu_telefono']
+            });
+
+            const vehiculoRegistrado = await VpusuariosModels.findOne({
+                where: { vus_usuario: usuarioDoc }
+            });
+
             await TyCParqueoModels.create({
                 usuario: usuarioDoc,
                 fecha_inscripcion: new Date().toISOString(),
-                ultimo_vehiculo: '',
-                telefono: '',
-                email: '',
+                ultimo_vehiculo: (vehiculoRegistrado && vehiculoRegistrado.vus_id)
+                    ? String(vehiculoRegistrado.vus_id)
+                    : 'sin vehiculo',
+                telefono: usuarioInfo?.usu_telefono || '',
+                email: usuarioInfo?.usu_email || '',
                 saldo: nuevoSaldo,
                 estado: 'activo'
             });

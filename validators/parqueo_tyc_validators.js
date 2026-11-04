@@ -3,11 +3,11 @@ const validateResults = require('../utils/handleValidator');
 
 const validatorCreate = [
     check("usuario").exists().notEmpty(), 
-    check("fecha_inscripcion").exists().notEmpty(),
-    check("ultimo_vehiculo").exists().notEmpty(),
+    check("fecha_inscripcion").optional(),
+    check("ultimo_vehiculo").optional(),
     check("telefono").optional(),
-    check("email").exists().notEmpty(),
-    check("saldo").exists().notEmpty(),
+    check("email").optional(),
+    check("saldo").optional(),
     (req, res, next) =>{
         return validateResults(req, res, next);
     }
