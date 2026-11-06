@@ -840,6 +840,23 @@ const getUsersByOrganization = async (req, res) => {
             andConditions.push({ usu_empresa: targetEmpresa });
         }
 
+        // Excluir usuarios de prueba por defecto (usu_prueba = 1)
+        const filterPrueba = params.usu_prueba !== undefined ? params.usu_prueba : params.filterPrueba;
+        if (filterPrueba !== undefined && filterPrueba !== "") {
+            const pruebaNum = parseInt(filterPrueba);
+            if (!isNaN(pruebaNum)) {
+                andConditions.push({ usu_prueba: pruebaNum });
+            }
+        } else {
+            andConditions.push({
+                [Op.or]: [
+                    { usu_prueba: 0 },
+                    { usu_prueba: '0' },
+                    { usu_prueba: null }
+                ]
+            });
+        }
+
         if (search) {
             andConditions.push({
                 [Op.or]: [
