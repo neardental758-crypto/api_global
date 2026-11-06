@@ -827,7 +827,9 @@ const getUsersByOrganization = async (req, res) => {
         const filterFechaDesde = params.filterFechaDesde || "";
         const filterFechaHasta = params.filterFechaHasta || "";
         const filterEstacion = params.filterEstacion || "";
-        const roleId = params.roleId || "";
+        const roleId = params.roleId !== undefined && params.roleId !== ""
+            ? (String(params.roleId).toLowerCase() === 'all' ? '' : params.roleId)
+            : '6142ca4bd97a767dbd8ad130';
         const sortColumn = params.sortColumn || "";
         const sortDirection = params.sortDirection || "asc";
         const isExport = params.export === 'true' || params.export === true || params.isExport === 'true' || params.isExport === true;
