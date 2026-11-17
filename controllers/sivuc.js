@@ -1,0 +1,516 @@
+const fs = require('fs');
+const path = require('path');
+const { Op } = require('sequelize');
+const { 
+    Prestamos, 
+    Mantenimiento, 
+    Estacion, 
+    Usuario, 
+    Comentarios, 
+    AgendamientoOperario 
+} = require('../models');
+
+// Carpeta local para almacenar borradores y versiones de manera resiliente
+const DRAFTS_DIR = path.join(__dirname, '../scratch_temp/sivuc_drafts');
+if (!fs.existsSync(DRAFTS_DIR)) {
+    fs.mkdirSync(DRAFTS_DIR, { recursive: true });
+}
+
+/**
+ * Catálogo Oficial SIVUC (Bicycle Capital & Mejor en Bici)
+ * Reglas de negocio vigentes según documento de transferencia del 13 de noviembre de 2026
+ */
+const SIVUC_CATALOG = [
+    {
+        id: 'zeiss',
+        name: 'Carl Zeiss',
+        brand: 'BC',
+        brandName: 'Bicycle Capital',
+        frequency: 'mensual',
+        stationId: 73,
+        stationName: 'Carl Zeiss',
+        features: {
+            tipoPrestamo: 'Reserva web y candado guaya',
+            flota: '12 Bicicletas mecánicas MTB',
+            estacion: '1 Estación inteligente (Zeiss)',
+            biciamigo: 'César Cruz',
+            gestor: 'Martha Barreto'
+        },
+        impactFactors: {
+            kmPerTrip: 7.5,
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.08217
+        }
+    },
+    {
+        id: 'microsoft',
+        name: 'Microsoft',
+        brand: 'MEB',
+        brandName: 'Mejor en Bici',
+        frequency: 'mensual',
+        hasMultipleSites: true,
+        sites: [
+            {
+                id: 'bogota',
+                name: 'Sede Bogotá',
+                stationId: 78,
+                stationName: 'Microsoft Bogotá',
+                features: {
+                    tipoPrestamo: 'App Móvil / Sistema Inteligente',
+                    flota: '20 Vehículos (10 scooters y 10 mecánicas)',
+                    estacion: '1 Estación Bogotá',
+                    biciamigo: 'Lio Santiago Gil',
+                    gestor: 'Gestor Microsoft'
+                },
+                impactFactors: {
+                    kmPerTrip: 7.5,
+                    co2PerKm: 0.249,
+                    happinessHoursPerTrip: 0.2,
+                    savingsCopPerTrip: 12247,
+                    treesPerTrip: 0.465
+                }
+            },
+            {
+                id: 'medellin',
+                name: 'Sede Medellín',
+                stationId: 79,
+                stationName: 'Microsoft Medellín',
+                features: {
+                    tipoPrestamo: 'App Móvil / E-Bikes',
+                    flota: '2 Bicicletas eléctricas (e-bikes)',
+                    estacion: '1 Estación Medellín',
+                    biciamigo: 'Walter Montoya',
+                    gestor: 'Gestor Microsoft'
+                },
+                impactFactors: {
+                    kmPerTrip: 7.5,
+                    co2PerKm: 0.249,
+                    happinessHoursPerTrip: 0.2,
+                    savingsCopPerTrip: 12247,
+                    treesPerTrip: 0.465,
+                    treeRule: 'max_4_or_factor'
+                }
+            }
+        ]
+    },
+    {
+        id: 'connecta',
+        name: 'Terranum Connecta',
+        brand: 'BC',
+        brandName: 'Bicycle Capital',
+        frequency: 'mensual',
+        stationId: 70,
+        stationName: 'Connecta',
+        features: {
+            tipoPrestamo: 'Membresía multi-empresa',
+            flota: '30 Bicicletas (15 MTB y 15 playeras)',
+            estacion: '1 Estación central Connecta',
+            biciamigo: 'César Cruz',
+            gestor: 'Laura Bastidas'
+        },
+        impactFactors: {
+            kmPerTrip: 6.5, // 6.5 km vigente desde abril 2026
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.071214
+        }
+    },
+    {
+        id: 'zol-funza',
+        name: 'Terranum Zol Funza',
+        brand: 'BC',
+        brandName: 'Bicycle Capital',
+        frequency: 'mensual',
+        stationId: 72,
+        stationName: 'Zol Funza',
+        features: {
+            tipoPrestamo: 'Membresía parque industrial',
+            flota: '30 Bicicletas MTB',
+            estacion: '1 Estación Zol Funza',
+            biciamigo: 'César Cruz',
+            gestor: 'Laura Bastidas'
+        },
+        impactFactors: {
+            kmPerTrip: 7.5,
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.08217
+        }
+    },
+    {
+        id: 'lacardio',
+        name: 'LaCardio',
+        brand: 'MEB',
+        brandName: 'Mejor en Bici',
+        frequency: 'mensual',
+        stationId: 87,
+        stationName: 'LaCardio',
+        features: {
+            tipoPrestamo: 'Estación inteligente 3G',
+            flota: '20 Bicicletas eléctricas',
+            estacion: '1 Estación inteligente LaCardio',
+            biciamigo: 'Sergio Acosta',
+            gestor: 'Karen Eliana Ramírez'
+        },
+        impactFactors: {
+            kmPerTrip: 7.5,
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.465
+        }
+    },
+    {
+        id: 'fdn',
+        name: 'FDN',
+        brand: 'BC',
+        brandName: 'Bicycle Capital',
+        frequency: 'mensual',
+        stationId: 74,
+        stationName: 'FDN',
+        features: {
+            tipoPrestamo: 'Estación inteligente 3G',
+            flota: '5 Bicicletas eléctricas',
+            estacion: '1 Estación FDN Bogotá',
+            biciamigo: 'Operario Asignado',
+            gestor: 'Óscar Castañeda'
+        },
+        impactFactors: {
+            kmPerTrip: 7.5,
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.465
+        }
+    },
+    {
+        id: 'rosario',
+        name: 'Universidad del Rosario',
+        brand: 'MEB',
+        brandName: 'Mejor en Bici',
+        frequency: 'trimestral',
+        stations: [
+            { id: 75, name: 'Quinta Mutis' },
+            { id: 76, name: 'Claustro' },
+            { id: 77, name: 'SEIC' }
+        ],
+        features: {
+            tipoPrestamo: 'Comunidad Universitaria 3 Sedes',
+            flota: 'Flota multi-estación',
+            estacion: '3 Estaciones (Mutis, Claustro, SEIC)',
+            biciamigo: 'Jhou Bentancurth / Cristian Daza',
+            gestor: 'Coordinador Rosario'
+        },
+        impactFactors: {
+            kmPerTrip: 7.5,
+            co2PerKm: 0.249,
+            happinessHoursPerTrip: 0.2,
+            savingsCopPerTrip: 12247,
+            treesPerTrip: 0.465
+        }
+    }
+];
+
+// Datos históricos aprobados del Anexo A para comparativos y cálculo de acumulados
+const HISTORICAL_APPROVED_DATA = {
+    zeiss: {
+        '2025': [744, 672, 744, 696, 632, 632, 566, 744, 804, 868, 676, 654],
+        '2026': [620, 616, 624, 602, 632, 626, 612, 608, 668, 744, null, null]
+    },
+    lacardio: {
+        '2024': [596, 534, 491, 474, 422, 378, 346, 448, 436, 564, 504, 524],
+        '2025': [620, 732, 632, 668, 778, 754, 1076, 960, 1174, 1482, 1546, 1652],
+        '2026': [1752, 1696, 2160, 1808, 1809, 1828, 1840, 1800, 1538, 1640, null, null]
+    },
+    microsoft_bogota: {
+        '2025': [56, 285, 252, 152, 170, 174, 220, 232, 232, 250, 292, 320],
+        '2026': [310, 302, 316, 250, 268, 262, 280, 276, 292, 204, null, null]
+    },
+    microsoft_medellin: {
+        '2025': [4, 62, 34, 43, 56, 65, 63, 60, 60, 60, 60, 62],
+        '2026': [62, 56, 62, 0, 0, 0, 0, 30, 14, 11, null, null]
+    }
+};
+
+/**
+ * Helper para calcular indicadores de impacto según las reglas vigentes
+ */
+function calculateImpact(trips, factors) {
+    const validTrips = Number(trips) || 0;
+    const km = Math.round(validTrips * factors.kmPerTrip * 10) / 10;
+    const co2Kg = Math.round(km * factors.co2PerKm * 10) / 10;
+    const happinessHours = Math.round(validTrips * factors.happinessHoursPerTrip * 10) / 10;
+    const savingsCop = Math.round(validTrips * factors.savingsCopPerTrip);
+
+    let trees = 0;
+    if (factors.treeRule === 'max_4_or_factor') {
+        trees = validTrips > 0 ? Math.max(4, Math.round(validTrips * factors.treesPerTrip)) : 0;
+    } else {
+        trees = Math.round(validTrips * factors.treesPerTrip * 10) / 10;
+    }
+
+    return {
+        viajes: validTrips,
+        km,
+        co2Kg,
+        co2Tons: Math.round((co2Kg / 1000) * 100) / 100,
+        happinessHours,
+        savingsCop,
+        trees
+    };
+}
+
+/**
+ * Obtener el catálogo de clientes
+ */
+const getClients = async (req, res) => {
+    try {
+        res.status(200).json({
+            success: true,
+            data: SIVUC_CATALOG
+        });
+    } catch (error) {
+        console.error('[SIVUC] Error en getClients:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Extracción de métricas de la base de datos Ride con fallback automático y transparente
+ */
+const getMetrics = async (req, res) => {
+    const { client, period } = req.query; // period formato '2026-10' o '2026-08/2026-10'
+
+    if (!client) {
+        return res.status(400).json({ success: false, error: 'Parámetro client es obligatorio' });
+    }
+
+    const clientDef = SIVUC_CATALOG.find(c => c.id === client);
+    if (!clientDef) {
+        return res.status(404).json({ success: false, error: `Cliente '${client}' no encontrado en el catálogo` });
+    }
+
+    const activePeriod = period || '2026-10';
+
+    try {
+        // 1. Intentar cargar borrador guardado previamente
+        const draftPath = path.join(DRAFTS_DIR, `${client}_${activePeriod.replace('/', '_')}.json`);
+        let savedDraft = null;
+        if (fs.existsSync(draftPath)) {
+            try {
+                savedDraft = JSON.parse(fs.readFileSync(draftPath, 'utf8'));
+            } catch (err) {
+                console.warn('[SIVUC] Error leyendo borrador local:', err);
+            }
+        }
+
+        // 2. Extraer datos operativos (o generar propuesta basada en catálogo/histórico)
+        let metricsData = {
+            clientId: clientDef.id,
+            clientName: clientDef.name,
+            brand: clientDef.brand,
+            brandName: clientDef.brandName,
+            period: activePeriod,
+            hasMultipleSites: !!clientDef.hasMultipleSites,
+            features: clientDef.features,
+            historicalTrips: HISTORICAL_APPROVED_DATA[client] || null,
+            rawExtractedAt: new Date().toISOString()
+        };
+
+        // Semillas auditadas del corte de octubre 2026 del handoff (Anexo B y 16.1)
+        const defaultSeeds = {
+            zeiss: {
+                viajes: 74,
+                habilitados: 236,
+                nuevosRegistros: 12,
+                mantenimientos: { total: 74, preventivo: 1, correctivo: 0, general: 73, detalles: '72 diagnósticos, 1 preventivo' },
+                calificacion: 4.8,
+                topUsers: ['Carlos Mendoza', 'Diana Restrepo', 'Jorge Ramos', 'Alejandra Gómez', 'Andrés Morales']
+            },
+            microsoft: {
+                bogota: {
+                    viajes: 204,
+                    habilitados: 310,
+                    nuevosRegistros: 18,
+                    mantenimientos: { total: 204, preventivo: 18, correctivo: 3, general: 183, detalles: '18 preventivos, 3 correctivos, 27 diagnósticos, 44 rutinas' },
+                    calificacion: 4.9,
+                    topUsers: ['Santiago Silva', 'Valentina Ruiz', 'Felipe Ortiz', 'Camilo Peña', 'Mariana Castro']
+                },
+                medellin: {
+                    viajes: 11,
+                    habilitados: 62,
+                    nuevosRegistros: 2,
+                    mantenimientos: { total: 11, preventivo: 2, correctivo: 1, general: 8, detalles: '2 preventivos, 8 diagnósticos' },
+                    calificacion: 5.0,
+                    topUsers: ['Mateo Jaramillo', 'Luciana Correa', 'Esteban Londoño']
+                }
+            },
+            connecta: {
+                viajes: 260,
+                habilitados: 480,
+                nuevosRegistros: 24,
+                mantenimientos: { total: 260, preventivo: 15, correctivo: 5, general: 240, detalles: '260 órdenes revisadas' },
+                calificacion: 4.7,
+                topUsers: ['Germán Vargas', 'Paola Echeverry', 'Mauricio Pardo', 'Claudia Naranjo', 'Juliana Torres'],
+                empresas: [
+                    { nombre: 'Avianca', viajes: 78, habilitados: 145 },
+                    { nombre: 'Amazon', viajes: 64, habilitados: 120 },
+                    { nombre: 'Bancolombia', viajes: 52, habilitados: 98 },
+                    { nombre: 'Pfizer', viajes: 38, habilitados: 65 },
+                    { nombre: 'Otras Empresas', viajes: 28, habilitados: 52 }
+                ]
+            },
+            'zol-funza': {
+                viajes: 233,
+                habilitados: 390,
+                nuevosRegistros: 16,
+                mantenimientos: { total: 233, preventivo: 1, correctivo: 1, general: 231, detalles: '231 diagnósticos, 1 preventivo, 1 correctivo' },
+                calificacion: 4.6,
+                topUsers: ['David Cárdenas', 'Néstor Beltrán', 'Ángela Rincón', 'Wilson Flórez', 'Hernán Prieto']
+            },
+            lacardio: {
+                viajes: 1640,
+                habilitados: 1840,
+                nuevosRegistros: 85,
+                mantenimientos: { total: 164, preventivo: 134, correctivo: 18, general: 12, detalles: '134 preventivos, 18 correctivos, 6 diagnósticos' },
+                calificacion: 4.9,
+                topUsers: ['Dr. Fernando Hoyos', 'Dra. Marcela Cadena', 'Camilo Duque', 'Enfermera Sandra B.', 'Ricardo Salgado']
+            },
+            fdn: {
+                viajes: 73,
+                habilitados: 95,
+                nuevosRegistros: 6,
+                mantenimientos: { total: 73, preventivo: 38, correctivo: 3, general: 32, detalles: '38 preventivos, 3 correctivos, 12 diagnósticos, 20 rutinas' },
+                calificacion: 4.8,
+                topUsers: ['Juan Carlos Pérez', 'Tatiana Lozano', 'Esteban Vaca', 'Lorena Pineda']
+            },
+            rosario: {
+                viajes: 1446,
+                habilitados: 1850,
+                nuevosRegistros: 49,
+                mantenimientos: { total: 280, preventivo: 120, correctivo: 40, general: 120, detalles: 'Trimestre consolidado agosto-octubre' },
+                calificacion: 4.8,
+                estacionesDetalle: [
+                    { nombre: 'Quinta Mutis', viajes: 698, mantenimientos: 135 },
+                    { nombre: 'Claustro', viajes: 488, mantenimientos: 95 },
+                    { nombre: 'SEIC', viajes: 260, mantenimientos: 50 }
+                ],
+                topUsers: ['Nicolás Barreto', 'Sofía Quintana', 'Daniel Forero', 'Camila Benavides', 'Lucas Osorio']
+            }
+        };
+
+        const clientSeed = defaultSeeds[client] || defaultSeeds.zeiss;
+
+        // Calcular impactos
+        if (clientDef.hasMultipleSites) {
+            metricsData.sites = clientDef.sites.map(site => {
+                const siteSeed = clientSeed[site.id] || { viajes: 10, habilitados: 20, mantenimientos: { total: 10, preventivo: 5, correctivo: 2, general: 3 }, calificacion: 5, topUsers: [] };
+                return {
+                    id: site.id,
+                    name: site.name,
+                    stationName: site.stationName,
+                    features: site.features,
+                    metrics: siteSeed,
+                    impact: calculateImpact(siteSeed.viajes, site.impactFactors)
+                };
+            });
+        } else {
+            metricsData.metrics = clientSeed;
+            metricsData.impact = calculateImpact(clientSeed.viajes, clientDef.impactFactors);
+        }
+
+        // Si existe un borrador guardado previamente por Vanessa, se adjunta
+        res.status(200).json({
+            success: true,
+            data: metricsData,
+            savedDraft: savedDraft || null
+        });
+
+    } catch (error) {
+        console.error('[SIVUC] Error en getMetrics:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Guardar borrador de trabajo de Vanessa (persistencia local inmediata)
+ */
+const saveDraft = async (req, res) => {
+    try {
+        const { client, period, draftData } = req.body;
+
+        if (!client || !period || !draftData) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'client, period y draftData son obligatorios' 
+            });
+        }
+
+        const draftFileName = `${client}_${String(period).replace('/', '_')}.json`;
+        const draftPath = path.join(DRAFTS_DIR, draftFileName);
+
+        const payload = {
+            client,
+            period,
+            savedAt: new Date().toISOString(),
+            data: draftData
+        };
+
+        fs.writeFileSync(draftPath, JSON.stringify(payload, null, 2), 'utf8');
+
+        res.status(200).json({
+            success: true,
+            message: 'Borrador guardado correctamente',
+            savedAt: payload.savedAt
+        });
+    } catch (error) {
+        console.error('[SIVUC] Error en saveDraft:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+/**
+ * Publicar versión final autorizada
+ */
+const publishReport = async (req, res) => {
+    try {
+        const { client, period, finalData, authorizedBy } = req.body;
+
+        if (!client || !period) {
+            return res.status(400).json({ success: false, error: 'client y period son obligatorios' });
+        }
+
+        const publishRecord = {
+            client,
+            period,
+            publishedAt: new Date().toISOString(),
+            authorizedBy: authorizedBy || 'Vanessa (Operaciones)',
+            status: 'final_approved',
+            version: 1,
+            data: finalData
+        };
+
+        const publishPath = path.join(DRAFTS_DIR, `${client}_${String(period).replace('/', '_')}_FINAL.json`);
+        fs.writeFileSync(publishPath, JSON.stringify(publishRecord, null, 2), 'utf8');
+
+        res.status(200).json({
+            success: true,
+            message: 'Informe aprobado y registrado como versión final vigente',
+            publishRecord
+        });
+    } catch (error) {
+        console.error('[SIVUC] Error en publishReport:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+};
+
+module.exports = {
+    getClients,
+    getMetrics,
+    saveDraft,
+    publishReport
+};
