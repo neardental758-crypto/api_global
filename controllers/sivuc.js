@@ -205,6 +205,56 @@ const SIVUC_CATALOG = [
             savingsCopPerTrip: 12247,
             treesPerTrip: 0.465
         }
+    },
+    {
+        id: 'banco-bogota',
+        name: 'Banco de Bogotá',
+        brand: 'BC',
+        brandName: 'Bicycle Capital',
+        frequency: 'mensual',
+        hasMultipleSites: true,
+        sites: [
+            {
+                id: 'bogota',
+                name: 'Sede Bogotá',
+                stationId: 80,
+                stationName: 'Banco de Bogotá',
+                features: {
+                    tipoPrestamo: 'Aplicación móvil - candados inteligentes y tótem para patinetas (Bogotá)',
+                    flota: 'Bicicleta mecánica MTB, E-bike to share y patinetas',
+                    estacion: 'Estaciones en Bogotá y Barranquilla con candados inteligentes 5G',
+                    biciamigo: 'Jose Segura',
+                    gestor: 'Lina Gamba (Bogotá) y gestor local por sucursal'
+                },
+                impactFactors: {
+                    kmPerTrip: 7.5,
+                    co2PerKm: 0.249,
+                    happinessHoursPerTrip: 0.2,
+                    savingsCopPerTrip: 12247,
+                    treesPerTrip: 0.086
+                }
+            },
+            {
+                id: 'medellin',
+                name: 'Sede Barranquilla',
+                stationId: 81,
+                stationName: 'Banco de Bogotá Barranquilla',
+                features: {
+                    tipoPrestamo: 'Aplicación móvil - candados inteligentes 5G',
+                    flota: 'Bicicletas mecánicas MTB y E-bikes',
+                    estacion: 'Estaciones en Barranquilla con candados 5G',
+                    biciamigo: 'Jose Segura',
+                    gestor: 'Gestor local Barranquilla'
+                },
+                impactFactors: {
+                    kmPerTrip: 7.5,
+                    co2PerKm: 0.249,
+                    happinessHoursPerTrip: 0.2,
+                    savingsCopPerTrip: 12247,
+                    treesPerTrip: 0.086
+                }
+            }
+        ]
     }
 ];
 
@@ -554,6 +604,24 @@ const getMetrics = async (req, res) => {
                     { nombre: 'SEIC', viajes: 260, mantenimientos: 50 }
                 ],
                 topUsers: ['Nicolás Barreto', 'Sofía Quintana', 'Daniel Forero', 'Camila Benavides', 'Lucas Osorio']
+            },
+            'banco-bogota': {
+                bogota: {
+                    viajes: 116,
+                    habilitados: 302,
+                    nuevosRegistros: 30,
+                    mantenimientos: { total: 42, preventivo: 28, correctivo: 4, general: 10, detalles: '28 preventivos, 4 correctivos, 10 diagnósticos' },
+                    calificacion: 4.9,
+                    topUsers: ['Jorge Isaac Polo Bracamonte', 'Julián David Amortegui', 'Andrés Guerra Ramírez']
+                },
+                medellin: {
+                    viajes: 29,
+                    habilitados: 98,
+                    nuevosRegistros: 8,
+                    mantenimientos: { total: 15, preventivo: 10, correctivo: 1, general: 4, detalles: '10 preventivos, 1 correctivo, 4 diagnósticos' },
+                    calificacion: 4.9,
+                    topUsers: ['Jorge Isaac Polo Bracamonte', 'Julián David Amortegui', 'Andrés Guerra Ramírez']
+                }
             }
         };
 
