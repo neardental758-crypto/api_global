@@ -439,6 +439,42 @@ const verificarPrestamosVencidos = async () => {
 
     for (const prestamo of prestamosVencidos) {
       try {
+        // Verificar que la bicicleta siga realmente en estado de préstamo
+        const bicicleta = prestamo.pre_bicicleta
+          ? await bicicletasModels.findByPk(prestamo.pre_bicicleta, { attributes: ['bic_id', 'bic_estado'] })
+          : null;
+
+        const estadosBiciEnPrestamo = ['PRESTADA', 'PRESTAMO PERSONALIZADO', 'PRESTAMO DE EMERGENCIA'];
+        if (!bicicleta || !estadosBiciEnPrestamo.includes(bicicleta.bic_estado)) {
+          console.log(`⏭️ [CRON] Préstamo ${prestamo.pre_id} omitido: vehículo ${prestamo.pre_bicicleta} en estado '${bicicleta ? bicicleta.bic_estado : 'NO_ENCONTRADO'}'.`);
+          await prestamosModels.update(
+            { pre_finalizado_por: `NOTIFICADO_VENCIDO_OMITIDO_BICI_${new Date().toISOString()}` },
+            { where: { pre_id: prestamo.pre_id } }
+          );
+          continue;
+        }
+
+        // Verificar que no exista un préstamo posterior del mismo usuario o de la misma bicicleta
+        const prestamoPosterior = await prestamosModels.findOne({
+          where: {
+            pre_id: { [Op.gt]: prestamo.pre_id },
+            [Op.or]: [
+              { pre_usuario: prestamo.pre_usuario },
+              { pre_bicicleta: prestamo.pre_bicicleta }
+            ]
+          },
+          attributes: ['pre_id']
+        });
+
+        if (prestamoPosterior) {
+          console.log(`⏭️ [CRON] Préstamo ${prestamo.pre_id} omitido: existe un préstamo posterior (${prestamoPosterior.pre_id}) para el usuario o vehículo.`);
+          await prestamosModels.update(
+            { pre_finalizado_por: `NOTIFICADO_VENCIDO_OMITIDO_POSTERIOR_${new Date().toISOString()}` },
+            { where: { pre_id: prestamo.pre_id } }
+          );
+          continue;
+        }
+
         const userToken = await tokenMsnModels.findOne({
           where: { documento: prestamo.pre_usuario },
           include: [{
