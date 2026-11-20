@@ -488,86 +488,137 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate)
     };
 }
 
+function getCompanySqlPattern(clientDef) {
+    const map = {
+        'zeiss': '%Zeiss%',
+        'microsoft': '%Microsoft%',
+        'connecta': '%Connecta%',
+        'zol-funza': '%Zol%',
+        'lacardio': '%Cardio%',
+        'fdn': '%FDN%',
+        'rosario': '%Rosario%',
+        'banco-bogota': '%Banco%'
+    };
+    return map[clientDef.id] || `%${clientDef.name}%`;
+}
+
 /**
- * Extractor de Soportes Digitales:
- * 1) Chatbot App Móvil (N8N) -> tablas n8n_peticiones y n8n_soporte en MySQL Movilidad
- * 2) Bot WhatsApp IA (agente-whatsapp-ia) -> tablas whatsapp_chat_messages y tickets en BD Bot WhatsApp
+ * Extractor de Soportes Digitales filtrado por Organización:
+ * 1) Chatbot App Móvil (N8N) -> tablas n8n_peticiones y n8n_soporte JOIN bc_usuarios (usu_empresa)
+ * 2) Bot WhatsApp IA (agente-whatsapp-ia) -> tablas whatsapp_chat_messages y tickets filtradas por teléfonos de bc_usuarios de la empresa
  */
-async function extractDigitalSupportMetrics(startDate, endDate) {
+async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
+    const digitalFallbackByClient = {
+        'lacardio': { whatsappChats: 148, whatsappMensajes: 640, whatsappTickets: 22, whatsappResueltos: 19, n8nPeticiones: 185, n8nSoportes: 28 },
+        'microsoft': { whatsappChats: 64, whatsappMensajes: 290, whatsappTickets: 9, whatsappResueltos: 8, n8nPeticiones: 92, n8nSoportes: 14 },
+        'zeiss': { whatsappChats: 28, whatsappMensajes: 118, whatsappTickets: 4, whatsappResueltos: 4, n8nPeticiones: 34, n8nSoportes: 5 },
+        'connecta': { whatsappChats: 112, whatsappMensajes: 480, whatsappTickets: 16, whatsappResueltos: 14, n8nPeticiones: 140, n8nSoportes: 21 },
+        'zol-funza': { whatsappChats: 45, whatsappMensajes: 195, whatsappTickets: 7, whatsappResueltos: 6, n8nPeticiones: 58, n8nSoportes: 9 },
+        'fdn': { whatsappChats: 19, whatsappMensajes: 82, whatsappTickets: 3, whatsappResueltos: 3, n8nPeticiones: 24, n8nSoportes: 4 },
+        'rosario': { whatsappChats: 175, whatsappMensajes: 760, whatsappTickets: 26, whatsappResueltos: 22, n8nPeticiones: 230, n8nSoportes: 35 },
+        'banco-bogota': { whatsappChats: 86, whatsappMensajes: 370, whatsappTickets: 12, whatsappResueltos: 10, n8nPeticiones: 108, n8nSoportes: 16 }
+    };
+
+    const seed = digitalFallbackByClient[clientDef.id] || digitalFallbackByClient['zeiss'];
     const result = {
-        whatsappChats: 148,
-        whatsappMensajes: 640,
-        whatsappTickets: 22,
-        whatsappResueltos: 19,
-        n8nPeticiones: 312,
-        n8nSoportes: 46,
+        ...seed,
         whatsappLive: false,
         n8nLive: false
     };
 
-    // 1. Consultar Chatbot App Móvil (N8N) en base de datos de Movilidad (sequelize)
+    const companyPattern = getCompanySqlPattern(clientDef);
+    let companyPhones = [];
+
+    // 1. Consultar Chatbot App Móvil (N8N) filtrado por usu_empresa en Movilidad (sequelize)
     try {
         const n8nPetRes = await sequelize.query(`
             SELECT COUNT(*) AS total_peticiones
-            FROM n8n_peticiones
-            WHERE fecha_creacion >= :startDate
-              AND fecha_creacion < :endDate
+            FROM n8n_peticiones np
+            INNER JOIN bc_usuarios u ON np.documento_usuario = u.usu_documento
+            WHERE u.usu_empresa LIKE :companyPattern
+              AND np.fecha_creacion >= :startDate
+              AND np.fecha_creacion < :endDate
         `, {
-            replacements: { startDate, endDate },
+            replacements: { companyPattern, startDate, endDate },
             type: QueryTypes.SELECT
         });
 
         const n8nSopRes = await sequelize.query(`
             SELECT COUNT(*) AS total_soportes
-            FROM n8n_soporte
-            WHERE fecha >= :startDate
-              AND fecha < :endDate
+            FROM n8n_soporte ns
+            INNER JOIN bc_usuarios u ON ns.documento_usuario = u.usu_documento
+            WHERE u.usu_empresa LIKE :companyPattern
+              AND ns.fecha >= :startDate
+              AND ns.fecha < :endDate
         `, {
-            replacements: { startDate, endDate },
+            replacements: { companyPattern, startDate, endDate },
             type: QueryTypes.SELECT
         });
+
+        const phonesRes = await sequelize.query(`
+            SELECT DISTINCT RIGHT(REPLACE(REPLACE(REPLACE(usu_telefono, '+', ''), ' ', ''), '-', ''), 10) AS tel10
+            FROM bc_usuarios
+            WHERE usu_empresa LIKE :companyPattern
+              AND usu_telefono IS NOT NULL
+              AND LENGTH(TRIM(usu_telefono)) >= 7
+        `, {
+            replacements: { companyPattern },
+            type: QueryTypes.SELECT
+        });
+
+        companyPhones = (phonesRes || []).map(r => String(r.tel10 || '').trim()).filter(t => t.length >= 7);
 
         result.n8nPeticiones = n8nPetRes && n8nPetRes[0] ? Number(n8nPetRes[0].total_peticiones) || 0 : 0;
         result.n8nSoportes = n8nSopRes && n8nSopRes[0] ? Number(n8nSopRes[0].total_soportes) || 0 : 0;
         result.n8nLive = true;
     } catch (n8nErr) {
-        console.warn(`[SIVUC N8N] No se pudo consultar n8n_peticiones/n8n_soporte (${n8nErr.message}). Usando respaldo.`);
+        console.warn(`[SIVUC N8N] No se pudo consultar n8n_peticiones/n8n_soporte para ${clientDef.name} (${n8nErr.message}). Usando respaldo.`);
     }
 
-    // 2. Consultar Bot de WhatsApp IA (agente-whatsapp-ia) en su base de datos dedicada
+    // 2. Consultar Bot de WhatsApp IA (agente-whatsapp-ia) filtrado por teléfonos de la organización
     try {
         const waSeq = getWhatsappSequelize();
         await waSeq.authenticate();
 
-        const waChatsRes = await waSeq.query(`
-            SELECT COUNT(DISTINCT wa_id) AS total_chats, COUNT(*) AS total_mensajes
-            FROM whatsapp_chat_messages
-            WHERE created_at >= :startDate
-              AND created_at < :endDate
-        `, {
-            replacements: { startDate, endDate },
-            type: QueryTypes.SELECT
-        });
+        if (companyPhones.length > 0) {
+            const waChatsRes = await waSeq.query(`
+                SELECT COUNT(DISTINCT wa_id) AS total_chats, COUNT(*) AS total_mensajes
+                FROM whatsapp_chat_messages
+                WHERE created_at >= :startDate
+                  AND created_at < :endDate
+                  AND RIGHT(wa_id, 10) IN (:companyPhones)
+            `, {
+                replacements: { startDate, endDate, companyPhones },
+                type: QueryTypes.SELECT
+            });
 
-        const waTicketsRes = await waSeq.query(`
-            SELECT 
-                COUNT(*) AS total_tickets,
-                SUM(CASE WHEN status IN ('RESOLVED', 'CLOSED') THEN 1 ELSE 0 END) AS resueltos
-            FROM tickets
-            WHERE created_at >= :startDate
-              AND created_at < :endDate
-        `, {
-            replacements: { startDate, endDate },
-            type: QueryTypes.SELECT
-        });
+            const waTicketsRes = await waSeq.query(`
+                SELECT 
+                    COUNT(*) AS total_tickets,
+                    SUM(CASE WHEN status IN ('RESOLVED', 'CLOSED') THEN 1 ELSE 0 END) AS resueltos
+                FROM tickets
+                WHERE created_at >= :startDate
+                  AND created_at < :endDate
+                  AND RIGHT(wa_id, 10) IN (:companyPhones)
+            `, {
+                replacements: { startDate, endDate, companyPhones },
+                type: QueryTypes.SELECT
+            });
 
-        result.whatsappChats = waChatsRes && waChatsRes[0] ? Number(waChatsRes[0].total_chats) || 0 : 0;
-        result.whatsappMensajes = waChatsRes && waChatsRes[0] ? Number(waChatsRes[0].total_mensajes) || 0 : 0;
-        result.whatsappTickets = waTicketsRes && waTicketsRes[0] ? Number(waTicketsRes[0].total_tickets) || 0 : 0;
-        result.whatsappResueltos = waTicketsRes && waTicketsRes[0] ? Number(waTicketsRes[0].resueltos) || 0 : 0;
+            result.whatsappChats = waChatsRes && waChatsRes[0] ? Number(waChatsRes[0].total_chats) || 0 : 0;
+            result.whatsappMensajes = waChatsRes && waChatsRes[0] ? Number(waChatsRes[0].total_mensajes) || 0 : 0;
+            result.whatsappTickets = waTicketsRes && waTicketsRes[0] ? Number(waTicketsRes[0].total_tickets) || 0 : 0;
+            result.whatsappResueltos = waTicketsRes && waTicketsRes[0] ? Number(waTicketsRes[0].resueltos) || 0 : 0;
+        } else {
+            // Sin teléfonos asociados a la empresa en bc_usuarios -> 0 chats registrados
+            result.whatsappChats = 0;
+            result.whatsappMensajes = 0;
+            result.whatsappTickets = 0;
+            result.whatsappResueltos = 0;
+        }
         result.whatsappLive = true;
     } catch (waErr) {
-        console.warn(`[SIVUC WhatsApp] No se pudo consultar BD de WhatsApp IA (${waErr.message}). Usando respaldo.`);
+        console.warn(`[SIVUC WhatsApp] No se pudo consultar BD de WhatsApp IA para ${clientDef.name} (${waErr.message}). Usando respaldo.`);
     }
 
     return result;
@@ -789,8 +840,8 @@ const getMetrics = async (req, res) => {
             metricsData.isLiveSql = false;
         }
 
-        // 3. Extraer métricas de soporte digital (Bot WhatsApp IA + Chatbot App Móvil N8N)
-        metricsData.soporteDigital = await extractDigitalSupportMetrics(startDate, endDate);
+        // 3. Extraer métricas de soporte digital (Bot WhatsApp IA + Chatbot App Móvil N8N) filtradas por organización
+        metricsData.soporteDigital = await extractDigitalSupportMetrics(clientDef, startDate, endDate);
 
         res.status(200).json({
             success: true,
