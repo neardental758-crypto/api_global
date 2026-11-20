@@ -546,7 +546,7 @@ async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
     const n8nDateRegex = buildN8nDateRegex(startDate, endDate);
     let companyPhones = [];
 
-    // 1. Consultar Chatbot App Móvil (N8N) filtrado por usu_empresa en Movilidad (sequelize)
+    // 1. Consultar Chatbot App Móvil filtrado por usu_empresa en Movilidad (1 registro por solicitud, sin duplicar pasos intermedios)
     try {
         const n8nPetRes = await sequelize.query(`
             SELECT COUNT(*) AS total_peticiones
@@ -554,6 +554,14 @@ async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
             INNER JOIN bc_usuarios u ON np.documento_usuario = u.usu_documento
             WHERE u.usu_empresa LIKE :companyPattern
               AND np.fecha_creacion REGEXP :n8nDateRegex
+              AND np.peticion NOT IN (
+                'liberar bici procesar estacion',
+                'liberar bici finalizar',
+                'reporte estacion estaciones',
+                'reporte estacion procesar',
+                'reporte saldo procesar',
+                'Tablet apagada procesar y enviar slack'
+              )
         `, {
             replacements: { companyPattern, n8nDateRegex },
             type: QueryTypes.SELECT
