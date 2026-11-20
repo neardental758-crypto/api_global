@@ -358,7 +358,11 @@ function calculateImpact(trips, factors) {
 /**
  * Extractor SQL Directo de la Base de Datos Ride
  */
-async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate) {
+async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate, companyPattern) {
+    const safeStationName = stationName || 'Rosario';
+    const safeStationId = Number(stationId) || 0;
+    const safeCompanyPattern = companyPattern || `%${safeStationName}%`;
+
     // 1. Conteo de préstamos finalizados en el período
     // pre_retiro_estacion almacena el nombre de la estación (ej: 'Carl Zeiss', 'Connecta')
     const tripsResult = await sequelize.query(`
@@ -370,7 +374,7 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate)
           AND pre_retiro_fecha < :endDate
     `, {
         replacements: {
-            stationPattern: `%${stationName}%`,
+            stationPattern: `%${safeStationName}%`,
             startDate,
             endDate
         },
@@ -390,8 +394,8 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate)
         GROUP BY tipo_mantenimiento
     `, {
         replacements: {
-            stationIdStr: String(stationId),
-            stationIdNum: Number(stationId),
+            stationIdStr: String(safeStationId),
+            stationIdNum: safeStationId,
             startDate,
             endDate
         },
@@ -456,21 +460,68 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate)
 
     const topUsers = (topResult || []).map(r => r.usuario_nombre).filter(Boolean);
 
-    // 5. Calificación promedio
-    const ratingResult = await sequelize.query(`
-        SELECT AVG(com_calificacion) AS promedio, COUNT(*) AS total_opiniones
-        FROM bc_comentarios_rentas
-        WHERE com_fecha >= :startDate 
-          AND com_fecha < :endDate
-          AND com_calificacion > 0
+    // 5. Calificación promedio y distribución real por estrellas (1 a 5) filtrada por organización
+    let ratingRows = await sequelize.query(`
+        SELECT 
+            TRIM(c.com_calificacion) AS estrella,
+            COUNT(*) AS cantidad
+        FROM bc_comentarios_rentas c
+        INNER JOIN bc_usuarios u ON c.com_usuario = u.usu_documento
+        WHERE u.usu_empresa LIKE :safeCompanyPattern
+          AND c.com_fecha >= :startDate 
+          AND c.com_fecha < :endDate
+          AND TRIM(c.com_calificacion) IN ('1', '2', '3', '4', '5')
+        GROUP BY TRIM(c.com_calificacion)
     `, {
-        replacements: { startDate, endDate },
+        replacements: { safeCompanyPattern, startDate, endDate },
         type: QueryTypes.SELECT
     });
 
-    const avgRating = ratingResult && ratingResult[0] && ratingResult[0].promedio 
-        ? Math.round(Number(ratingResult[0].promedio) * 10) / 10 
+    if (!ratingRows || ratingRows.length === 0) {
+        ratingRows = await sequelize.query(`
+            SELECT 
+                TRIM(c.com_calificacion) AS estrella,
+                COUNT(*) AS cantidad
+            FROM bc_comentarios_rentas c
+            INNER JOIN bc_prestamos p ON c.com_prestamo = p.pre_id
+            WHERE p.pre_retiro_estacion LIKE :stationPattern
+              AND c.com_fecha >= :startDate 
+              AND c.com_fecha < :endDate
+              AND TRIM(c.com_calificacion) IN ('1', '2', '3', '4', '5')
+            GROUP BY TRIM(c.com_calificacion)
+        `, {
+            replacements: { stationPattern: `%${safeStationName}%`, startDate, endDate },
+            type: QueryTypes.SELECT
+        });
+    }
+
+    const starCounts = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
+    let totalRatings = 0;
+    let weightedSum = 0;
+
+    (ratingRows || []).forEach(r => {
+        const star = String(Number(r.estrella) || 5);
+        const qty = Number(r.cantidad) || 0;
+        if (starCounts[star] !== undefined && qty > 0) {
+            starCounts[star] += qty;
+            totalRatings += qty;
+            weightedSum += Number(star) * qty;
+        }
+    });
+
+    const avgRating = totalRatings > 0
+        ? Math.round((weightedSum / totalRatings) * 10) / 10
         : 4.8;
+
+    const calificacionDistribucion = totalRatings > 0
+        ? {
+            '1': Math.round((starCounts['1'] / totalRatings) * 100),
+            '2': Math.round((starCounts['2'] / totalRatings) * 100),
+            '3': Math.round((starCounts['3'] / totalRatings) * 100),
+            '4': Math.round((starCounts['4'] / totalRatings) * 100),
+            '5': Math.round((starCounts['5'] / totalRatings) * 100)
+        }
+        : { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 };
 
     return {
         viajes: totalViajes,
@@ -484,6 +535,8 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate)
             detalles: breakdownDetails.length > 0 ? breakdownDetails.join(', ') : 'Operación normal'
         },
         calificacion: avgRating,
+        calificacionTotal: totalRatings,
+        calificacionDistribucion,
         topUsers: topUsers.length > 0 ? topUsers : ['Usuario Destacado 1', 'Usuario Destacado 2', 'Usuario Destacado 3']
     };
 }
@@ -811,10 +864,12 @@ const getMetrics = async (req, res) => {
             await sequelize.authenticate();
             console.log(`[SIVUC SQL] Conexión MySQL activa. Extrayendo datos para ${clientDef.name} (${startDate} a ${endDate})...`);
 
+            const companyPattern = getCompanySqlPattern(clientDef);
+
             if (clientDef.hasMultipleSites) {
                 metricsData.sites = [];
                 for (const site of clientDef.sites) {
-                    const siteExtracted = await extractLiveSqlMetrics(site.stationName, site.stationId, startDate, endDate);
+                    const siteExtracted = await extractLiveSqlMetrics(site.stationName, site.stationId, startDate, endDate, companyPattern);
                     metricsData.sites.push({
                         id: site.id,
                         name: site.name,
@@ -826,7 +881,7 @@ const getMetrics = async (req, res) => {
                 }
                 liveExtracted = true;
             } else {
-                const singleExtracted = await extractLiveSqlMetrics(clientDef.stationName, clientDef.stationId, startDate, endDate);
+                const singleExtracted = await extractLiveSqlMetrics(clientDef.stationName, clientDef.stationId, startDate, endDate, companyPattern);
                 metricsData.metrics = singleExtracted;
                 metricsData.impact = calculateImpact(singleExtracted.viajes, clientDef.impactFactors);
                 liveExtracted = true;
