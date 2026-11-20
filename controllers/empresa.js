@@ -134,7 +134,6 @@ const getUsuariosCountByOrganization = async (req, res) => {
           ],
           usu_created_at: {
             [Op.not]: null,
-            [Op.ne]: '',
             [Op.between]: [fechaInicioStr, fechaFinStr]
           }
         }
@@ -247,7 +246,6 @@ const getUsersByStation = async (req, res) => {
           ...baseQuery,
           usu_created_at: {
             [Op.not]: null,
-            [Op.ne]: '',
             [Op.between]: [fechaInicioStr, fechaFinStr]
           }
         };
