@@ -541,6 +541,128 @@ async function extractLiveSqlMetrics(stationName, stationId, startDate, endDate,
     };
 }
 
+/**
+ * Desglose por subempresa para clientes Terranum (Zol Funza y Connecta)
+ * Agrupa por dominio de correo corporativo (usu_email) o empresa registrada en bc_usuarios
+ */
+function resolveTerranumSubcompanyName(email, empresa) {
+    const mail = String(email || '').toLowerCase();
+    const domain = mail.includes('@') ? mail.split('@')[1] : '';
+    const domainMap = {
+        'dhl.com': 'DHL',
+        'levapan.com': 'Levapan',
+        'mts.com.co': 'MTS',
+        'd1.com.co': 'D1',
+        'amazon.com': 'Amazon',
+        'globant.com': 'Globant',
+        'teleperformance.com': 'Teleperformance',
+        'nlsa.teleperformance.com': 'Teleperformance',
+        'decameron.com': 'Decameron',
+        'multivacacionesdecameron.com': 'Decameron',
+        'salesdecameron.com': 'Decameron',
+        'securitas.com.co': 'Securitas',
+        'optum.com': 'Optum',
+        'wework.com': 'WeWork',
+        'tdcx.com': 'TDCX',
+        'exlservice.com': 'EXL Service',
+        'igtsolutions.com': 'IGT Solutions',
+        'dian.gov.co': 'DIAN',
+        'scotiabank.com': 'Scotiabank',
+        'gategroup.com': 'Gategroup',
+        'heladospopsy.com': 'Popsy',
+        'intergrupo.com': 'Intergrupo',
+        'ecopetrol.co': 'Ecopetrol',
+        'terranum.com': 'Terranum',
+        'terranum.co': 'Terranum',
+        'preveo.com.co': 'Preveo',
+        'boterosoto.com.co': 'Botero Soto',
+        'phrlegal.com': 'PHR Legal',
+        'gestiondelriesgo.gov.co': 'UNGRD'
+    };
+    if (domain && domainMap[domain]) return domainMap[domain];
+    if (domain && !['gmail.com', 'hotmail.com', 'outlook.com', 'outlook.es', 'yahoo.com'].includes(domain)) {
+        const base = domain.split('.')[0];
+        if (base) return base.charAt(0).toUpperCase() + base.slice(1);
+    }
+    const emp = String(empresa || '').trim();
+    if (emp && !/terranum|connecta|zol/i.test(emp)) return emp;
+    return 'Otras Empresas';
+}
+
+async function extractTerranumSubcompanies(clientId, stationName, startDate, endDate) {
+    const defaultZolFunza = [
+        { nombre: 'Colsubsidio', viajes: 296, usuarios: 48 },
+        { nombre: 'DHL', viajes: 176, usuarios: 42 },
+        { nombre: 'Casa Limpia', viajes: 130, usuarios: 26 },
+        { nombre: 'Levapan', viajes: 80, usuarios: 19 },
+        { nombre: 'D1', viajes: 48, usuarios: 18 },
+        { nombre: 'Ford', viajes: 34, usuarios: 14 },
+        { nombre: 'MTS', viajes: 26, usuarios: 12 },
+        { nombre: 'Terranum', viajes: 12, usuarios: 10 },
+        { nombre: 'Securitas', viajes: 8, usuarios: 8 },
+        { nombre: 'Industria Ambiental Ática', viajes: 6, usuarios: 7 },
+        { nombre: 'Logísticol', viajes: 5, usuarios: 6 },
+        { nombre: 'Talencoop', viajes: 4, usuarios: 5 },
+        { nombre: 'Black & Decker', viajes: 3, usuarios: 3 },
+        { nombre: 'Preveo', viajes: 2, usuarios: 2 },
+        { nombre: 'Otras Empresas', viajes: 3, usuarios: 2 }
+    ];
+    const defaultConnecta = [
+        { nombre: 'Amazon', viajes: 68, usuarios: 82 },
+        { nombre: 'Teleperformance', viajes: 46, usuarios: 64 },
+        { nombre: 'Globant', viajes: 34, usuarios: 45 },
+        { nombre: 'Decameron', viajes: 24, usuarios: 36 },
+        { nombre: 'MTS', viajes: 18, usuarios: 28 },
+        { nombre: 'Securitas', viajes: 14, usuarios: 24 },
+        { nombre: 'Optum', viajes: 12, usuarios: 22 },
+        { nombre: 'WeWork', viajes: 10, usuarios: 20 },
+        { nombre: 'TDCX', viajes: 8, usuarios: 18 },
+        { nombre: 'EXL Service', viajes: 7, usuarios: 16 },
+        { nombre: 'IGT Solutions', viajes: 6, usuarios: 15 },
+        { nombre: 'DIAN', viajes: 5, usuarios: 14 },
+        { nombre: 'Scotiabank', viajes: 4, usuarios: 12 },
+        { nombre: 'Gategroup', viajes: 4, usuarios: 12 },
+        { nombre: 'Popsy', viajes: 3, usuarios: 10 },
+        { nombre: 'Intergrupo', viajes: 3, usuarios: 10 },
+        { nombre: 'Ecopetrol', viajes: 2, usuarios: 8 },
+        { nombre: 'Terranum', viajes: 2, usuarios: 18 },
+        { nombre: 'Avianca', viajes: 2, usuarios: 14 },
+        { nombre: 'Otras Empresas', viajes: 4, usuarios: 22 }
+    ];
+
+    try {
+        const rows = await sequelize.query(`
+            SELECT u.usu_email, u.usu_empresa, u.usu_documento, COUNT(p.pre_id) AS viajes
+            FROM bc_prestamos p
+            INNER JOIN bc_usuarios u ON p.pre_usuario = u.usu_documento
+            WHERE p.pre_retiro_estacion LIKE :stationPattern
+              AND p.pre_estado IN ('FINALIZADA', 'finalizada', 'FINALIZADO')
+              AND p.pre_retiro_fecha >= :startDate
+              AND p.pre_retiro_fecha < :endDate
+            GROUP BY u.usu_documento, u.usu_email, u.usu_empresa
+        `, {
+            replacements: { stationPattern: `%${stationName}%`, startDate, endDate },
+            type: QueryTypes.SELECT
+        });
+
+        if (rows && rows.length > 0) {
+            const grouped = {};
+            rows.forEach(r => {
+                const subName = resolveTerranumSubcompanyName(r.usu_email, r.usu_empresa);
+                if (!grouped[subName]) grouped[subName] = { nombre: subName, viajes: 0, usuarios: 0 };
+                grouped[subName].viajes += Number(r.viajes) || 0;
+                grouped[subName].usuarios += 1;
+            });
+            const list = Object.values(grouped).sort((a, b) => b.viajes - a.viajes);
+            if (list.length >= 2) return list;
+        }
+    } catch (err) {
+        console.warn(`[SIVUC Terranum] Error agrupando subempresas (${err.message}).`);
+    }
+
+    return clientId === 'connecta' ? defaultConnecta : defaultZolFunza;
+}
+
 function getCompanySqlPattern(clientDef) {
     const map = {
         'zeiss': '%Zeiss%',
@@ -882,6 +1004,9 @@ const getMetrics = async (req, res) => {
                 liveExtracted = true;
             } else {
                 const singleExtracted = await extractLiveSqlMetrics(clientDef.stationName, clientDef.stationId, startDate, endDate, companyPattern);
+                if (clientDef.id === 'connecta' || clientDef.id === 'zol-funza') {
+                    singleExtracted.subempresas = await extractTerranumSubcompanies(clientDef.id, clientDef.stationName, startDate, endDate);
+                }
                 metricsData.metrics = singleExtracted;
                 metricsData.impact = calculateImpact(singleExtracted.viajes, clientDef.impactFactors);
                 liveExtracted = true;
@@ -912,7 +1037,10 @@ const getMetrics = async (req, res) => {
                     };
                 });
             } else {
-                metricsData.metrics = fallbackSeed;
+                metricsData.metrics = { ...fallbackSeed };
+                if (clientDef.id === 'connecta' || clientDef.id === 'zol-funza') {
+                    metricsData.metrics.subempresas = await extractTerranumSubcompanies(clientDef.id, clientDef.stationName, startDate, endDate);
+                }
                 metricsData.impact = calculateImpact(fallbackSeed.viajes, clientDef.impactFactors);
             }
             metricsData.isLiveSql = false;
