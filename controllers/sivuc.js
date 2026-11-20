@@ -502,6 +502,22 @@ function getCompanySqlPattern(clientDef) {
     return map[clientDef.id] || `%${clientDef.name}%`;
 }
 
+function buildN8nDateRegex(startDate, endDate) {
+    const start = new Date(String(startDate).replace(' ', 'T'));
+    const end = new Date(String(endDate).replace(' ', 'T'));
+    const patterns = [];
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    while (cur < end) {
+        const y = cur.getFullYear();
+        const m = cur.getMonth() + 1;
+        const mPad = String(m).padStart(2, '0');
+        const mOpt = m < 10 ? `0?${m}` : `${m}`;
+        patterns.push(`/${mOpt}/${y}|^${y}-${mPad}-`);
+        cur.setMonth(cur.getMonth() + 1);
+    }
+    return patterns.length > 0 ? patterns.join('|') : `^${String(startDate).slice(0, 7)}`;
+}
+
 /**
  * Extractor de Soportes Digitales filtrado por Organización:
  * 1) Chatbot App Móvil (N8N) -> tablas n8n_peticiones y n8n_soporte JOIN bc_usuarios (usu_empresa)
@@ -527,6 +543,7 @@ async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
     };
 
     const companyPattern = getCompanySqlPattern(clientDef);
+    const n8nDateRegex = buildN8nDateRegex(startDate, endDate);
     let companyPhones = [];
 
     // 1. Consultar Chatbot App Móvil (N8N) filtrado por usu_empresa en Movilidad (sequelize)
@@ -536,10 +553,9 @@ async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
             FROM n8n_peticiones np
             INNER JOIN bc_usuarios u ON np.documento_usuario = u.usu_documento
             WHERE u.usu_empresa LIKE :companyPattern
-              AND np.fecha_creacion >= :startDate
-              AND np.fecha_creacion < :endDate
+              AND np.fecha_creacion REGEXP :n8nDateRegex
         `, {
-            replacements: { companyPattern, startDate, endDate },
+            replacements: { companyPattern, n8nDateRegex },
             type: QueryTypes.SELECT
         });
 
@@ -548,10 +564,9 @@ async function extractDigitalSupportMetrics(clientDef, startDate, endDate) {
             FROM n8n_soporte ns
             INNER JOIN bc_usuarios u ON ns.documento_usuario = u.usu_documento
             WHERE u.usu_empresa LIKE :companyPattern
-              AND ns.fecha >= :startDate
-              AND ns.fecha < :endDate
+              AND ns.fecha REGEXP :n8nDateRegex
         `, {
-            replacements: { companyPattern, startDate, endDate },
+            replacements: { companyPattern, n8nDateRegex },
             type: QueryTypes.SELECT
         });
 
